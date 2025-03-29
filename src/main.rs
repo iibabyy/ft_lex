@@ -10,11 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::init();
 
-    dbg!(config).unwrap();
+    dbg!(&config);
 
     let mut parser = Parsing::new()?;
 
-    parser.parse("path")?;
+    parser.parse(&config)?;
 
     Ok(())
 }

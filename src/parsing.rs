@@ -8,21 +8,72 @@ use error::*;
 pub mod utils;
 use utils::*;
 
-use std::{fs::File, io::{self, BufRead, BufReader}};
+use std::{fs::File, io::{self, BufRead, BufReader, Read, Stdin}, os::unix::fs::FileExt, path::PathBuf};
 
-type Lines = std::iter::Enumerate<io::Lines<BufReader<File>>>;
+type Lines<R> = std::iter::Enumerate<io::Lines<BufReader<R>>>;
 
-pub struct Parsing {
-	definitions: Definitions,
+pub struct Reader<R: Read> {
+	path: PathBuf,
 
-	arg: Vec<Option<String>>,
-
-	lines: Lines,
+	lines: Lines<R>,
 
 	line: Option<String>,
 
-	line_number: usize,
-	
+	index: usize,
+}
+
+pub trait FReader {
+	fn path(&self) -> &PathBuf;
+	fn path_mut(&mut self) -> &mut PathBuf;
+	fn next(&self) -> io::Result<Option<&String>>;
+	fn line(&self) -> Option<&String>;
+	fn line_mut(&mut self) -> Option<&mut String>;
+	fn index(&self) -> usize;
+}
+
+impl<R: Read> Reader<R> {
+	fn new(reader: R, path: PathBuf) -> Reader<R> {
+        let buf_reader = BufReader::new(reader);
+        let lines = io::BufRead::lines(buf_reader).enumerate();
+        
+        Reader {
+            path,
+            lines,
+            line: None,
+            index: 0,
+        }
+    }
+
+	pub fn next(&mut self) -> io::Result<Option<&String>> {
+		if let Some((index, line)) = self.lines.next() {
+			self.line = Some(line?);
+			self.index = index;
+
+			Ok(self.line.as_ref())
+		} else {
+			self.line = None;
+			Ok(None)
+		}
+	}
+}
+
+pub fn reader_from_file(file_path: impl Into<PathBuf>) -> io::Result<Reader<File>> {
+	let path = file_path.into();
+	let file = File::open(&path)?;
+
+	Ok(Reader::new(file, path))
+}
+
+pub fn reader_from_stdin() -> Reader<io::Stdin> {
+	let stdin = io::stdin();
+
+	Reader::new(stdin, PathBuf::from("<stdin>"))
+}
+
+pub struct Parsing {
+
+	definitions: Definitions,
+
 	// section actually being parsed
 	section: Section
 }
@@ -49,6 +100,7 @@ impl Section {
 
 impl Parsing {
 	pub fn new() -> io::Result<Self> {
+
 		Ok(
 			Self {
 				definitions: Definitions::new(),
@@ -61,38 +113,38 @@ impl Parsing {
 		self.section = self.section.next();
 	}
 
-	pub fn parse(&mut self, args: Vec<Option<String>>) -> ParsingResult<()> {
+	pub fn parse(&mut self, config: &Config) -> ParsingResult<()> {
 
-		for arg in args {
-			let path = arg.unwrap();
+		let mut iter = config.args.iter().map(|arg| arg.as_ref());
 
-			let file = std::fs::File::open(path)?;
+		while let Some(arg) = iter.next() {
+			if let Some(path) = arg {
+				self.parse_section(&mut reader_from_file(path)?)?;
+			} else {
+				self.parse_section(&mut reader_from_stdin())?;
+			}
+		}
 
-			let reader = BufReader::new(file);
+		Ok(())
+	}
 
-			let mut lines: Lines = reader.lines().enumerate();
+	fn parse_section<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<()> {
 
-			loop {
-				match self.section {
-					Section::Definitions => { self.definitions.parse(&mut lines)?; eprintln!("{:#?}", self.definitions) },
+		loop {
+			match self.section {
+				Section::Definitions => { self.definitions.parse(reader)?; dbg!(&self.definitions); },
 
-					Section::Rules => {
-						eprintln!("TODO: Rules Section");
-						return Ok(())
-					},
+				Section::Rules => {
+					eprintln!("TODO: Rules Section");
+					return Ok(())
+				},
 
-					Section::Subroutines => {
-						eprintln!("TODO: Subroutines Section");
-						return Ok(())
-					}
+				Section::Subroutines => {
+					eprintln!("TODO: Subroutines Section");
+					return Ok(())
 				}
 			}
 		}
-	}
-
-	fn parse_definition(line: String, lines: Lines) -> ParsingResult<()> {
-
-
 
 		todo!()
 	}
@@ -116,11 +168,4 @@ impl Parsing {
 		Ok(true)
 	}
 
-	fn next_line(&mut self) -> io::Result<Option<String>> {
-		if let Some((line_index, line)) = self.lines.next() {
-
-		} else {
-
-		}
-	}
 }

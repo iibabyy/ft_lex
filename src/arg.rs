@@ -14,45 +14,45 @@ impl Default for TargetLanguage {
 }
 
 #[derive(Debug, Default)]
-pub(super) struct Config {
+pub struct Config {
 	/// input files
 	/// None if stdin
-	args: Vec<Option<String>>,
+	pub args: Vec<Option<String>>,
 
 	/* OPTIONS */
 
 	/// -o FILE / --output-file=FILE
-	output_file: Option<String>,
+	pub output_file: Option<String>,
 
 	/// -t / --stdout
-	stdout: bool,
+	pub stdout: bool,
 
 	/// -e LANG / --emit=LANG
-	target_language: TargetLanguage,
+	pub target_language: TargetLanguage,
 
 	/// replace yy (e.g yylex -> {STRING}lex)
 	/// -P STRING / --prefix=STRING
-	prefix: String,
+	pub prefix: String,
 
 	/// do not include <unistd.h>
 	/// --nounistd
-	no_unistd: bool,
+	pub no_unistd: bool,
 
 	// do not generate those functions
 	// --noFUNCTION
-	no_functions: Vec<String>,
+	pub no_functions: Vec<String>,
 
 	// -i --case-insensitive
-	case_insensitive: bool,
+	pub case_insensitive: bool,
 
 	// track line count in yylineno
 	// --yylineno
-	yylineno: bool
+	pub yylineno: bool
 }
 
 impl Config {
 
-	pub(super) fn init() -> Result<Self, ()> {
+	pub(super) fn init() -> Self {
 		let mut args = env::args();
 
 		let _executable = args.next();
@@ -87,7 +87,7 @@ impl Config {
 			config.args.push(None);
 		}
 
-		Ok(config)
+		config
 	}
 
 }

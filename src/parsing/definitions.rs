@@ -1,6 +1,34 @@
 use super::*;
 use std::{collections::{HashMap, HashSet}, mem::{self, take}};
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum StateType {
+	Exclusive,
+	Inclusive
+}
+
+impl ToString for StateType {
+	fn to_string(&self) -> String {
+		match self {
+			StateType::Exclusive => "exclusive",
+			StateType::Inclusive => "inclusive",
+		}.to_string()
+	}
+}
+
+impl TryFrom<&str> for StateType {
+	type Error = ();
+
+	fn try_from(value: &str) -> Result<Self, Self::Error> {
+		match value {
+			"s" | "S" => Ok(StateType::Inclusive),
+			"x" | "X" => Ok(StateType::Exclusive),
+
+			_ => Err(())
+		}
+	}
+}
+
 #[derive(Debug)]
 pub struct Definitions {
 	substitutes: HashMap<String, String>,
@@ -10,7 +38,7 @@ pub struct Definitions {
 
 	table_sizes: HashMap<TableSizeDeclaration, usize>,
 
-	states: HashMap<String, bool>
+	states: HashMap<String, StateType>
 }
 
 pub enum DefinitionType {
@@ -18,7 +46,7 @@ pub enum DefinitionType {
 	Substitute(String, String),
 	Fragment(String),
 	TypeDeclaration(TypeDeclaration),
-	StateDeclaration(String, bool),
+	StateDeclaration(String, StateType),
 	Empty,
 	EndOfSection
 }
@@ -34,15 +62,10 @@ impl Definitions {
 		}
 	}
 
-	pub(super) fn parse(&mut self, lines: &mut Lines) -> ParsingResult<&mut Self> {
+	pub(super) fn parse<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<&mut Self> {
 
-		let mut saved_index = 0;
-
-		while let Some((index, line)) = lines.next() {
-			saved_index = index;
-			let line = line?;
-
-			match Self::line_type(line, index, lines)? {
+		loop {
+			match Self::line_type(reader)? {
 
 				// Table Size ('%{letter} {size}')
 				DefinitionType::TableSize(table, size) => {
@@ -72,7 +95,7 @@ impl Definitions {
 					if let Some(previous_exclusive) = self.states.insert(state_name.clone(), exclusive) {
 						// Duplicate Declaration
 						eprintln!("Warning: Duplicate State declaration for {} : previous value ({}) replaced by {}",
-							state_name, previous_exclusive, exclusive
+							state_name, previous_exclusive.to_string(), exclusive.to_string()
 						)
 					}
 				},
@@ -100,15 +123,12 @@ impl Definitions {
 				DefinitionType::EndOfSection => return Ok(self),
 			}
 		}
-
-		// No End of Section ('%%') found
-		return Err(ParsingError::
-			end_of_file(saved_index)
-			.because("expected '%%'")
-		);
 	}
 
-	fn line_type(line: String, line_index: usize, lines: &mut Lines) -> ParsingResult<DefinitionType> {
+	fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
+
+		let line = reader.next()?.cloned()
+			.ok_or(ParsingError::end_of_file(reader.index))?;
 
 		if line.is_empty() {
 			return Ok(DefinitionType::Empty)
@@ -130,10 +150,10 @@ impl Definitions {
 		// Substitution Chains
 		if first_char.is_alphabetic() || first_char == '_' {
 			let split = Utils::split_whitespace_once(&line)
-				.ok_or_else(|| ParsingError::syntax("incomplete name definition", line_index))?;
+				.ok_or(ParsingError::syntax("incomplete name definition", reader.index))?;
 
 			if !Utils::is_iso_C_normed(split.0) {
-				return Err(ParsingError::syntax("name must be iso-C normed", line_index));
+				return Err(ParsingError::syntax("name must be iso-C normed", reader.index));
 			}
 
 			return Ok(DefinitionType::Substitute(
@@ -144,12 +164,14 @@ impl Definitions {
 
 		// Block Program Fragments
 		if line == "%{" {
-			let (content, found, last_index) = Utils::read_until_line("%}", lines)?;
+			let open_dilimiter_index = reader.index;
+
+			let (content, found) = Utils::read_until_line("%}", reader)?;
 
 			if !found {
 				return Err(ParsingError::
-					end_of_file(last_index)
-					.because(format!("expected close matching delimiter for open delimiter at line {line_index}"))
+					end_of_file(reader.index)
+					.because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
 				);
 			}
 
@@ -160,7 +182,7 @@ impl Definitions {
 
 		// Only possibility left is '%', Syntax error else
 		if first_char != '%' {
-			return Err(ParsingError::unexpected_token(first_char, line_index, 0));
+			return Err(ParsingError::unexpected_token(first_char, reader.index, 0));
 		}
 
 		let mut split: Vec<String> = line[1..].split_ascii_whitespace().map(|str| str.to_string()).collect();
@@ -174,24 +196,22 @@ impl Definitions {
 
 		match flag.as_str() {
 			"s" | "S" | "x" | "X" => {
-				Self::check_split_size(&split, 1, line_index, "{state name}")?;
+				Self::check_split_size(&split, 2, reader.index, "{state name}")?;
 
 				let state_name = take(&mut split[1]);
 
 				if !Utils::is_iso_C_normed(&state_name) {
-					return Err(ParsingError::syntax("states must be iso-C normed", line_index));
+					return Err(ParsingError::syntax("states must be iso-C normed", reader.index));
 				}
 
-				let exclusive = flag == "x" || flag == "X";
-
-				return Ok(DefinitionType::StateDeclaration(state_name, exclusive))
+				return Ok(DefinitionType::StateDeclaration(state_name, StateType::try_from(flag.as_str()).unwrap()))
 			}
 			"p" | "n" | "a" | "e" |"k" | "o" => {
-				Self::check_split_size(&split, 2, line_index, "{flag} {positive number}")?;
+				Self::check_split_size(&split, 2, reader.index, "{flag} {positive number}")?;
 
 				let size = split[1].as_str().parse::<usize>()
 					.map_err(|err|ParsingError::
-						invalid_number(&split[1], line_index)
+						invalid_number(&split[1], reader.index)
 						.because(format!("{err}"))
 					)?;
 				
@@ -199,12 +219,12 @@ impl Definitions {
 			},
 
 			"array" | "pointer" => {
-				Self::check_split_size(&split, 1, line_index, "{type}")?;
+				Self::check_split_size(&split, 1, reader.index, "{type}")?;
 
 				return Ok(DefinitionType::TypeDeclaration(TypeDeclaration::try_from(flag).unwrap()))
 			}
 
-			&_ => return Err(ParsingError::unexpected_token(flag, line_index, 1))
+			&_ => return Err(ParsingError::unexpected_token(flag, reader.index, 1))
 		}
 	}
 
@@ -225,7 +245,7 @@ impl Definitions {
 		}
 
 		if split.len() > expected {
-			return Err(ParsingError::unexpected_token_in_line(&split[2], line_index).because(format!("expected: {expected_err_msg}")))
+			return Err(ParsingError::unexpected_token_in_line(&split[expected], line_index).because(format!("expected: {expected_err_msg}")))
 		}
 
 		Ok(())
