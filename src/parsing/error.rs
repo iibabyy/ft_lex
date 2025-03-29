@@ -44,7 +44,7 @@ impl std::fmt::Display for ParsingError {
                 .unwrap_or("".to_string());
 
             format!(
-                ".{}:{}",
+                ":{}{}",
                 self.line_index.as_ref().unwrap() + 1,
                 char_index
             )
@@ -150,7 +150,7 @@ impl ParsingError {
 
     /// Creates an error for an invalid number format.
     pub fn invalid_number(number: impl ToString) -> Self {
-        let err = format!("invalid number: {}", number.to_string());
+        let err = format!("invalid number: `{}`", number.to_string());
         ParsingError::syntax(err)
     }
 }

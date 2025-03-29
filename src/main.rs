@@ -19,5 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("{}", format!("{}", err))
     }
 
+    dbg!(parser.definitions);
+
     Ok(())
 }

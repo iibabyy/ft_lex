@@ -2,6 +2,7 @@
   #include <stdio.h>
   #include <stdlib.h>
 %}
+
 %{
   int num_lines = 0;
   int foo = 12;
@@ -9,7 +10,7 @@
 
 %p 2500
 %n 500
-%a -1
+%a 2
 %e 1000
 %k 1000
 %o 3000
@@ -19,7 +20,7 @@
 %s COMMENT FOO BAR FOO
 %x STRING FOO
 
-DIGIT      [0-9]
+FOO                    [0-9] [a-z]      
 ALPHA      [A-Za-z]
 ID         {ALPHA}({ALPHA}|{DIGIT})*
 HEX        \\x[0-9A-Fa-f]{1,2}

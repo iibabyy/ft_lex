@@ -93,7 +93,7 @@ pub fn reader_from_stdin() -> Reader<io::Stdin> {
 /// The main parsing structure that handles the lexer definition parsing process.
 pub struct Parsing {
     /// Collection of lexer definitions (substitutions, fragments, etc.)
-    definitions: Definitions,
+    pub definitions: Definitions,
 
     /// The current section being parsed
     section: Section,
@@ -202,9 +202,8 @@ impl Parsing {
 
         // Ensure the delimiter is just "%%" with no extra characters
         if line.len() > 2 {
-            let char_index = 2;
-            let char = line.chars().nth(char_index).unwrap();
-            return Err(ParsingError::unexpected_token(char).line(line_index).char(char_index));
+			let (unexpected_token, _) = Utils::split_whitespace_once(&line).unwrap_or((line.as_str(), ""));
+            return Err(ParsingError::unexpected_token(unexpected_token).line(line_index));
         }
 
         // Valid section delimiter

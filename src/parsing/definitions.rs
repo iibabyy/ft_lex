@@ -185,7 +185,7 @@ impl Definitions {
 
             // Validate that the name follows C naming conventions
             if !Utils::is_iso_C_normed(split.0) {
-                return Err(ParsingError::syntax(split.0).line(reader.index).because("name must be iso-C normed"));
+                return Err(ParsingError::syntax(format!("`{}`", split.0)).line(reader.index).because("name must be iso-C normed"));
             }
 
             return Ok(DefinitionType::Substitute(
@@ -241,7 +241,7 @@ impl Definitions {
             // State declarations (%s for inclusive, %x for exclusive)
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
-                    return Err(ParsingError::end_of_line(reader.index).because("expected {STATE} after this flag"))
+                    return Err(ParsingError::end_of_line(reader.index).because(format!("`%{flag} {{STATE_NAME}}`")))
                 }
 
                 let states_type = StateType::try_from(flag.as_str()).unwrap();
@@ -252,7 +252,7 @@ impl Definitions {
                 // Validate that all state names follow C naming conventions
                 for name in &split {
                     if !Utils::is_iso_C_normed(name) {
-                        return Err(ParsingError::syntax(name).because("states must be iso-C normed").line(reader.index));
+                        return Err(ParsingError::syntax(format!("`{name}`")).because("states must be iso-C normed").line(reader.index));
                     }
                 }
 
@@ -264,7 +264,7 @@ impl Definitions {
             // Table size declarations (%p, %n, %a, %e, %k, %o followed by a number)
             "p" | "n" | "a" | "e" | "k" | "o" => {
                 // Ensure the format is correct: %flag number
-                Self::check_split_size(&split, 2, reader.index, "{flag} {positive number}")?;
+                Self::check_split_size(&split, 2, reader.index, format!("`%{flag} {{POSITIVE_NUMBER}}`"))?;
 
                 // Parse the size as a positive number
                 let size = split[1].as_str().parse::<usize>().map_err(|err| {
@@ -279,13 +279,13 @@ impl Definitions {
             // Type declarations (%array or %pointer)
             "array" | "pointer" => {
                 // Ensure there are no unexpected tokens after the type
-                Self::check_split_size(&split, 1, reader.index, "{type}")?;
+                Self::check_split_size(&split, 1, reader.index, format!("`%{flag}`"))?;
                 return Ok(DefinitionType::TypeDeclaration(
                     TypeDeclaration::try_from(flag).unwrap(),
                 ));
             }
             // Any other flag is an error
-            _ => return Err(ParsingError::unexpected_token(flag).line(reader.index).char(1)),
+            _ => return Err(ParsingError::unexpected_token(format!("%{flag}")).line(reader.index).char(1)),
         }
     }
 
