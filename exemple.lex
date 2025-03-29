@@ -9,15 +9,15 @@
 
 %p 2500
 %n 500
-%a 2000
+%a -1
 %e 1000
 %k 1000
 %o 3000
 
 %array
 
-%s COMMENT
-%x STRING
+%s COMMENT FOO BAR FOO
+%x STRING FOO
 
 DIGIT      [0-9]
 ALPHA      [A-Za-z]

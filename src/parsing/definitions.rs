@@ -50,7 +50,7 @@ pub enum DefinitionType {
     Substitute(String, String),
     Fragment(String),
     TypeDeclaration(TypeDeclaration),
-    StateDeclaration(String, StateType),
+    StateDeclaration(StateType, Vec<String>),
     Empty,
     EndOfSection,
 }
@@ -92,15 +92,20 @@ impl Definitions {
                 }
 
                 // State ('{state name}')
-                DefinitionType::StateDeclaration(state_name, exclusive) => {
-                    if let Some(previous_exclusive) =
-                        self.states.insert(state_name.clone(), exclusive)
-                    {
-                        // Duplicate Declaration
-                        eprintln!("Warning: Duplicate State declaration for {} : previous value ({}) replaced by {}",
-							state_name, previous_exclusive.to_string(), exclusive.to_string()
-						)
-                    }
+                DefinitionType::StateDeclaration(state_type, states_names) => {
+                    for name in states_names {
+						if let Some(previous_state_type) = self.states.insert(name.clone(), state_type) {
+							if  previous_state_type != state_type {
+								// Duplicate Declaration (last was different state type)
+								eprintln!("Warning: Duplicate State declaration for `{}`: previous value (`{}`) replaced by `{}`",
+									name, previous_state_type.to_string(), state_type.to_string()
+								)
+							} else {
+								// Duplicate Declaration (last was same state type)
+								eprintln!("Warning: Duplicate State declaration for `{}`", name)
+							}
+                    	}
+					}
                 }
 
                 // Fragment (' {Program fragment}' or '%{\n{Program fragment}\n%}')
@@ -215,20 +220,26 @@ impl Definitions {
 
         match flag.as_str() {
             "s" | "S" | "x" | "X" => {
-                Self::check_split_size(&split, 2, reader.index, "{state name}")?;
+                if split.len() < 2 {
+					return Err(ParsingError::end_of_line(reader.index).because("expected {STATE} after the flag"))
+				}
 
-                let state_name = take(&mut split[1]);
+				let states_type = StateType::try_from(flag.as_str()).unwrap();
+                // remove the flag (now only states names remains)
+				split.remove(0);
 
-                if !Utils::is_iso_C_normed(&state_name) {
-                    return Err(ParsingError::syntax(
-                        "states must be iso-C normed",
-                        reader.index,
-                    ));
-                }
+				for name in &split {
+					if !Utils::is_iso_C_normed(name) {
+						return Err(ParsingError::syntax(
+							format!("{}: states must be iso-C normed", name),
+							reader.index,
+						));
+					}
+				}
 
                 return Ok(DefinitionType::StateDeclaration(
-                    state_name,
-                    StateType::try_from(flag.as_str()).unwrap(),
+                    states_type,
+                    split,
                 ));
             }
             "p" | "n" | "a" | "e" | "k" | "o" => {

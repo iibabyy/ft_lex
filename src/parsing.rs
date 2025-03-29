@@ -118,9 +118,11 @@ impl Parsing {
 
         while let Some(arg) = iter.next() {
             if let Some(path) = arg {
-                self.parse_section(&mut reader_from_file(path)?)?;
+                self.parse_section(&mut reader_from_file(path)?)
+					.map_err(|err| err.from_file(path))?;
             } else {
-                self.parse_section(&mut reader_from_stdin())?;
+                self.parse_section(&mut reader_from_stdin())
+					.map_err(|err| err.from_file("<stdin>"))?;
             }
         }
 
@@ -132,7 +134,7 @@ impl Parsing {
             match self.section {
                 Section::Definitions => {
                     self.definitions.parse(reader)?;
-                    dbg!(&self.definitions);
+                    // dbg!(&self.definitions);
 
                     self.next_section();
                 }

@@ -1,8 +1,12 @@
+pub type ParsingResult<T> = Result<T, ParsingError>;
+
 #[derive(Debug)]
 pub enum ParsingError {
     Io(std::io::Error),
     Syntax(String),
 }
+
+impl std::error::Error for ParsingError {}
 
 impl std::fmt::Display for ParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -13,9 +17,21 @@ impl std::fmt::Display for ParsingError {
     }
 }
 
-impl std::error::Error for ParsingError {}
+impl Into<String> for ParsingError {
+    fn into(self) -> String {
+        match self {
+            ParsingError::Io(err) => err.to_string(),
+            ParsingError::Syntax(err) => err.to_string()
+        }
+    }
 
-pub type ParsingResult<T> = Result<T, ParsingError>;
+    // fn to_string(&self) -> String {
+    //     match self {
+    //         ParsingError::Io(err) => err.to_string(),
+    //         ParsingError::Syntax(err) => err.to_string()
+    //     }
+    // }
+}
 
 impl From<std::io::Error> for ParsingError {
     fn from(error: std::io::Error) -> Self {
@@ -46,19 +62,31 @@ impl ParsingError {
     }
 
     pub fn end_of_file(line_index: usize) -> ParsingError {
-        ParsingError::Syntax(format!("{} unexpected end of file", line_index))
+        ParsingError::Syntax(format!("{} unexpected end of file", line_index + 1))
     }
 
     pub fn end_of_line(line_index: usize) -> ParsingError {
-        ParsingError::Syntax(format!("{} unexpected newline", line_index))
+        ParsingError::Syntax(format!("{} unexpected newline", line_index + 1))
     }
 
     pub fn invalid_number(number: impl ToString, line_index: usize) -> Self {
         ParsingError::Syntax(format!(
             "{} invalid number: {}",
-            line_index,
+            line_index + 1,
             number.to_string()
         ))
+    }
+	
+    pub fn from_file(self, file: impl ToString) -> Self {
+        let file = file.to_string();
+
+        match self {
+            // adding a cause to the error message
+            ParsingError::Syntax(err) => ParsingError::Syntax(format!("{}:{}", file, err)),
+
+            // We don't change error message
+            ParsingError::Io(err) => ParsingError::Io(err),
+        }
     }
 
     pub fn because(self, msg: impl ToString) -> Self {
