@@ -40,15 +40,24 @@ impl Definitions {
 			saved_index = index;
 			let line = line?;
 
-			let definition = Self::line_type(line, index, lines)?;
+			match Self::line_type(line, index, lines)? {
 
-			match definition {
+				// Table Size ('%{letter} {size}')
 				DefinitionType::TableSize(table, size) => { self.table_sizes.insert(table, size); },
+				
+				// Substitute ('{name} {substitute}')
 				DefinitionType::Substitute(name, substitute) => { self.substitutes.insert(name, substitute); },
+				
+				// Fragment (' {Program fragment}' or '%{\n{Program fragment}\n%}')
 				DefinitionType::Fragment(fragment) => { self.fragments.push(fragment); },
+				
+				// Type of yytext ('%array' or '%pointer')
 				DefinitionType::TypeDeclaration(type_decla) => { self.type_declaration = Some(type_decla) },
 				
+				// Empty line
 				DefinitionType::Empty => { },
+
+				// End of Definition section
 				DefinitionType::EndOfSection => return Ok(self),
 			}
 		}
