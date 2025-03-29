@@ -1,103 +1,151 @@
 pub type ParsingResult<T> = Result<T, ParsingError>;
 
 #[derive(Debug)]
-pub enum ParsingError {
+pub enum ParsingErrorType {
     Io(std::io::Error),
     Syntax(String),
+}
+
+#[derive(Debug)]
+pub struct ParsingError {
+    file: Option<String>,
+    line_index: Option<usize>,
+    char_index: Option<usize>,
+    type_: ParsingErrorType,
+
+    causes: Vec<String>
 }
 
 impl std::error::Error for ParsingError {}
 
 impl std::fmt::Display for ParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParsingError::Io(err) => write!(f, "{}", err.to_string()),
-            ParsingError::Syntax(err) => write!(f, "{}", err),
-        }
-    }
-}
+        let message = match &self.type_ {
+            ParsingErrorType::Io(err) => err.to_string(),
+            ParsingErrorType::Syntax(err) => err.to_string(),
+        };
 
-impl Into<String> for ParsingError {
-    fn into(self) -> String {
-        match self {
-            ParsingError::Io(err) => err.to_string(),
-            ParsingError::Syntax(err) => err.to_string()
-        }
-    }
+        let line_and_char_index = if self.line_index.is_some() {
+            let char_index = self.char_index
+                .and_then(|index| Some(format!(":{index}")))
+                .unwrap_or("".to_string());
 
-    // fn to_string(&self) -> String {
-    //     match self {
-    //         ParsingError::Io(err) => err.to_string(),
-    //         ParsingError::Syntax(err) => err.to_string()
-    //     }
-    // }
+            format!(
+                ".{}:{}",
+                self.line_index.as_ref().unwrap() + 1,
+                char_index
+            )
+        } else {
+            "".to_string()
+        };
+
+        let file = if self.file.is_some() {
+            format!(
+                "{}{}",
+                self.file.as_ref().unwrap(),
+                line_and_char_index
+            )
+        } else {
+            "".to_string()
+        };
+
+        let mut causes = String::new();
+
+        self.causes.iter().for_each(|cause| {
+            causes.push_str(": ");
+            causes.push_str(cause);
+        });
+
+        write!(f,
+            "{} : {}{}",
+            file, message, causes
+        )
+    }
 }
 
 impl From<std::io::Error> for ParsingError {
     fn from(error: std::io::Error) -> Self {
-        ParsingError::Io(error)
+        ParsingError::io(error)
     }
 }
 
 impl ParsingError {
-    pub fn unexpected_token(token: impl ToString, line_index: usize, char_index: usize) -> Self {
-        ParsingError::Syntax(format!(
-            "lexer.{}:{} unexpected token '{}'",
-            line_index + 1,
-            char_index + 1,
-            token.to_string()
-        ))
+    pub fn io(err: std::io::Error) -> Self {
+        Self {
+            char_index: None,
+            line_index: None,
+            file: None,
+
+            type_: ParsingErrorType::Io(err),
+
+            causes: Vec::new()
+        }
     }
 
-    pub fn syntax(err: impl ToString, line_index: usize) -> Self {
-        ParsingError::Syntax(format!("{}: {}", line_index + 1, err.to_string()))
+    pub fn syntax(err: impl ToString) -> Self {
+        Self {
+            char_index: None,
+            line_index: None,
+            file: None,
+
+            type_: ParsingErrorType::Syntax(err.to_string()),
+
+            causes: Vec::new()
+        }
     }
 
-    pub fn unexpected_token_in_line(token: impl ToString, line_index: usize) -> Self {
-        ParsingError::Syntax(format!(
-            "{} unexpected token '{}'",
-            line_index + 1,
-            token.to_string()
-        ))
+    pub fn file(mut self, file: String) -> Self {
+        self.file = Some(file);
+        
+        self
+    }
+    
+    pub fn line(mut self, line_index: usize) -> Self {
+        self.line_index = Some(line_index);
+        
+        self
+    }
+    
+    pub fn char(mut self, char_index: usize) -> Self {
+        self.char_index = Some(char_index);
+        
+        self
+    }
+
+    pub fn because(mut self, msg: impl ToString) -> Self {
+        let msg = msg.to_string();
+
+        self.causes.push(msg.to_string());
+
+        self
+    }
+
+}
+
+impl ParsingError {
+
+    pub fn unexpected_token(token: impl ToString) -> Self {
+        let err = format!("unexpected token `{}`", token.to_string());
+
+        Self::syntax(err)
     }
 
     pub fn end_of_file(line_index: usize) -> ParsingError {
-        ParsingError::Syntax(format!("{} unexpected end of file", line_index + 1))
+        let err = "unexpected end of file";
+
+        Self::syntax(err).line(line_index)
     }
 
     pub fn end_of_line(line_index: usize) -> ParsingError {
-        ParsingError::Syntax(format!("{} unexpected newline", line_index + 1))
+        let err = "unexpected end of line";
+
+        ParsingError::syntax(err).line(line_index)
     }
 
-    pub fn invalid_number(number: impl ToString, line_index: usize) -> Self {
-        ParsingError::Syntax(format!(
-            "{} invalid number: {}",
-            line_index + 1,
-            number.to_string()
-        ))
-    }
-	
-    pub fn from_file(self, file: impl ToString) -> Self {
-        let file = file.to_string();
-
-        match self {
-            // adding a cause to the error message
-            ParsingError::Syntax(err) => ParsingError::Syntax(format!("{}:{}", file, err)),
-
-            // We don't change error message
-            ParsingError::Io(err) => ParsingError::Io(err),
-        }
+    pub fn invalid_number(number: impl ToString) -> Self {
+        let err = format!("invalid number: {}", number.to_string());
+        
+        ParsingError::syntax(err)
     }
 
-    pub fn because(self, msg: impl ToString) -> Self {
-        let msg = msg.to_string();
-
-        match self {
-            // adding a cause to the error message
-            ParsingError::Syntax(err) => ParsingError::Syntax(format!("{}: {}", err, msg)),
-
-            // We don't change error message
-            ParsingError::Io(err) => ParsingError::Io(err),
-        }
-    }
 }
