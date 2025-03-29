@@ -4,9 +4,12 @@ use std::{
     mem::{self, take},
 };
 
+/// Represents the type of a lexer state.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum StateType {
+    /// Exclusive state: only one rule can match
     Exclusive,
+    /// Inclusive state: multiple rules can match
     Inclusive,
 }
 
@@ -27,35 +30,50 @@ impl TryFrom<&str> for StateType {
         match value {
             "s" | "S" => Ok(StateType::Inclusive),
             "x" | "X" => Ok(StateType::Exclusive),
-
             _ => Err(()),
         }
     }
 }
 
+/// Collection of all lexer definitions including substitutions, fragments, and declarations.
 #[derive(Debug)]
 pub struct Definitions {
+    /// Map of name to substitution text
     substitutes: HashMap<String, String>,
+
+    /// List of program fragments
     fragments: Vec<String>,
 
+    /// Declaration of yytext type (array or pointer)
     type_declaration: Option<TypeDeclaration>,
 
+    /// Map of table size declarations to their values
     table_sizes: HashMap<TableSizeDeclaration, usize>,
 
+    /// Map of state names to their types
     states: HashMap<String, StateType>,
 }
 
+/// Represents different types of definitions that can appear in the definitions section.
 pub enum DefinitionType {
+    /// Table size declaration (e.g., "%p 100")
     TableSize(TableSizeDeclaration, usize),
+    /// Name substitution (e.g., "name text")
     Substitute(String, String),
+    /// Program fragment (either inline or block)
     Fragment(String),
+    /// yytext type declaration (array or pointer)
     TypeDeclaration(TypeDeclaration),
+    /// State declaration with type and names
     StateDeclaration(StateType, Vec<String>),
+    /// Empty line
     Empty,
+    /// End of definitions section marker ("%%")
     EndOfSection,
 }
 
 impl Definitions {
+    /// Creates a new empty definitions collection.
     pub(super) fn new() -> Self {
         Self {
             substitutes: HashMap::new(),
@@ -66,75 +84,74 @@ impl Definitions {
         }
     }
 
+    /// Parses the definitions section of a lexer file.
+    /// 
+    /// This function handles all types of definitions:
+    /// - Table size declarations (%p, %n, etc.)
+    /// - Name substitutions
+    /// - Program fragments (inline and block)
+    /// - Type declarations (%array, %pointer)
+    /// - State declarations (%s, %x)
+    /// 
+    /// Returns an error if any definition is invalid or if the section delimiter is missing.
     pub(super) fn parse<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<&mut Self> {
         loop {
             match Self::line_type(reader)? {
-                // Table Size ('%{letter} {size}')
                 DefinitionType::TableSize(table, size) => {
                     if let Some(previous_size) = self.table_sizes.insert(table, size) {
-                        // Duplicate Declaration
                         eprintln!("Warning: Duplicate table size declaration for {} : previous value ({}) replaced by {}",
-							table.to_string(), previous_size, size
-						)
+                            table.to_string(), previous_size, size
+                        )
                     }
                 }
-
-                // Substitute ('{name} {substitute}')
                 DefinitionType::Substitute(name, substitute) => {
                     if let Some(previous_substitute) =
                         self.substitutes.insert(name.clone(), substitute.clone())
                     {
-                        // Duplicate Declaration
                         eprintln!("Warning: Duplicate Substitution declaration for {} : previous value ({}) replaced by {}",
-							name, previous_substitute, substitute
-						)
+                            name, previous_substitute, substitute
+                        )
                     }
                 }
-
-                // State ('{state name}')
                 DefinitionType::StateDeclaration(state_type, states_names) => {
                     for name in states_names {
-						if let Some(previous_state_type) = self.states.insert(name.clone(), state_type) {
-							if  previous_state_type != state_type {
-								// Duplicate Declaration (last was different state type)
-								eprintln!("Warning: Duplicate State declaration for `{}`: previous value (`{}`) replaced by `{}`",
-									name, previous_state_type.to_string(), state_type.to_string()
-								)
-							} else {
-								// Duplicate Declaration (last was same state type)
-								eprintln!("Warning: Duplicate State declaration for `{}`", name)
-							}
-                    	}
-					}
+                        if let Some(previous_state_type) = self.states.insert(name.clone(), state_type) {
+                            if  previous_state_type != state_type {
+                                eprintln!("Warning: Duplicate State declaration for `{}`: previous value (`{}`) replaced by `{}`",
+                                    name, previous_state_type.to_string(), state_type.to_string()
+                                )
+                            } else {
+                                eprintln!("Warning: Duplicate State declaration for `{}`", name)
+                            }
+                        }
+                    }
                 }
-
-                // Fragment (' {Program fragment}' or '%{\n{Program fragment}\n%}')
                 DefinitionType::Fragment(fragment) => {
                     self.fragments.push(fragment);
                 }
-
-                // Type of yytext ('%array' or '%pointer')
                 DefinitionType::TypeDeclaration(type_decla) => {
                     if self.type_declaration.is_some() && self.type_declaration != Some(type_decla)
                     {
-                        // Duplicate Declaration
                         eprintln!("Warning: Duplicate type declaration declaration : previous value (%{}) replaced by %{}",
-							self.type_declaration.unwrap().to_string(), type_decla.to_string()
-						)
+                            self.type_declaration.unwrap().to_string(), type_decla.to_string()
+                        )
                     }
-
                     self.type_declaration = Some(type_decla)
                 }
-
-                // Empty line
                 DefinitionType::Empty => {}
-
-                // End of Definition section
                 DefinitionType::EndOfSection => return Ok(self),
             }
         }
     }
 
+    /// Determines the type of definition from a line of input.
+    /// 
+    /// This function handles all possible definition formats:
+    /// - Lines starting with space: inline program fragments
+    /// - Lines starting with name: substitutions
+    /// - Lines starting with %: declarations and block fragments
+    /// - Empty lines
+    /// - Section delimiter
     fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
         let line = reader
             .next()?
@@ -146,107 +163,112 @@ impl Definitions {
         }
 
         if line == "%%" {
+            // Section delimiter found - end of definition section
             return Ok(DefinitionType::EndOfSection);
         }
 
         let mut chars = line.chars();
-
         let first_char = chars.next().unwrap();
 
-        // Line Program Fragment
+        // Line Program Fragment: lines that start with a space
+        // This is C code that will be included directly in the output
         if first_char == ' ' {
             return Ok(DefinitionType::Fragment(line[1..].to_string()));
         }
 
-        // Substitution Chains
+        // Substitution Chains: lines that start with an identifier
+        // Format: name substitute_text
         if first_char.is_alphabetic() || first_char == '_' {
-            let split = Utils::split_whitespace_once(&line).ok_or(ParsingError::syntax(
-                "incomplete name definition",
-                reader.index,
-            ))?;
+            // Split into name and substitute text (first whitespace only)
+            let split = Utils::split_whitespace_once(&line)
+                .ok_or(ParsingError::syntax("incomplete name definition").line(reader.index))?;
 
+            // Validate that the name follows C naming conventions
             if !Utils::is_iso_C_normed(split.0) {
-                return Err(ParsingError::syntax(
-                    "name must be iso-C normed",
-                    reader.index,
-                ));
+                return Err(ParsingError::syntax(split.0).line(reader.index).because("name must be iso-C normed"));
             }
 
             return Ok(DefinitionType::Substitute(
-                split.0.to_string(), // name
-                split.1.to_string(), // substitute
+                split.0.to_string(),
+                split.1.to_string(),
             ));
         }
 
-        // Block Program Fragments
+        // Block Program Fragments: multi-line C code blocks
+        // Format: %{ ... %}
         if line == "%{" {
             let open_dilimiter_index = reader.index;
-
+            
+            // Read all lines until closing delimiter %}
             let (content, found) = Utils::read_until_line("%}", reader)?;
 
+            // Check if the closing delimiter was found or if we reached EOF
             if !found {
                 return Err(ParsingError::
-					end_of_file(reader.index)
-					.because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
-				);
+                    end_of_file(reader.index)
+                    .because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
+                );
             }
 
-            // join with newlines between each lines
+            // Join the lines with newlines and add extra newlines at start and end
+            // This ensures proper separation in the generated code
             let mut content = content.join("\n");
-
-            // add a newline before and after the fragment
             content.insert(0, '\n');
             content.push('\n');
 
             return Ok(DefinitionType::Fragment(content));
         }
 
-        // Only possibility left is '%', Syntax error else
+        // The remaining cases all start with '%' - flag-based declarations
         if first_char != '%' {
-            return Err(ParsingError::unexpected_token(first_char, reader.index, 0));
+            return Err(ParsingError::unexpected_token(first_char).line(reader.index).char(0));
         }
 
+        // Split the line into words after the % character
         let mut split: Vec<String> = line[1..]
             .split_ascii_whitespace()
             .map(|str| str.to_string())
             .collect();
 
-        // empty
         if split.is_empty() {
             return Ok(DefinitionType::Empty);
         }
 
+        // Take the first word as the flag (removing it from split)
         let flag = take(&mut split[0]);
 
         match flag.as_str() {
+            // State declarations (%s for inclusive, %x for exclusive)
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
-					return Err(ParsingError::end_of_line(reader.index).because("expected {STATE} after the flag"))
-				}
+                    return Err(ParsingError::end_of_line(reader.index).because("expected {STATE} after this flag"))
+                }
 
-				let states_type = StateType::try_from(flag.as_str()).unwrap();
-                // remove the flag (now only states names remains)
-				split.remove(0);
+                let states_type = StateType::try_from(flag.as_str()).unwrap();
+                
+                // First element is now empty after take(), remove it
+                split.remove(0);
 
-				for name in &split {
-					if !Utils::is_iso_C_normed(name) {
-						return Err(ParsingError::syntax(
-							format!("{}: states must be iso-C normed", name),
-							reader.index,
-						));
-					}
-				}
+                // Validate that all state names follow C naming conventions
+                for name in &split {
+                    if !Utils::is_iso_C_normed(name) {
+                        return Err(ParsingError::syntax(name).because("states must be iso-C normed").line(reader.index));
+                    }
+                }
 
                 return Ok(DefinitionType::StateDeclaration(
                     states_type,
                     split,
                 ));
             }
+            // Table size declarations (%p, %n, %a, %e, %k, %o followed by a number)
             "p" | "n" | "a" | "e" | "k" | "o" => {
+                // Ensure the format is correct: %flag number
                 Self::check_split_size(&split, 2, reader.index, "{flag} {positive number}")?;
 
+                // Parse the size as a positive number
                 let size = split[1].as_str().parse::<usize>().map_err(|err| {
-                    ParsingError::invalid_number(&split[1], reader.index).because(format!("{err}"))
+                    ParsingError::invalid_number(&split[1]).line(reader.index).because(err.to_string())
                 })?;
 
                 return Ok(DefinitionType::TableSize(
@@ -254,19 +276,20 @@ impl Definitions {
                     size,
                 ));
             }
-
+            // Type declarations (%array or %pointer)
             "array" | "pointer" => {
+                // Ensure there are no unexpected tokens after the type
                 Self::check_split_size(&split, 1, reader.index, "{type}")?;
-
                 return Ok(DefinitionType::TypeDeclaration(
                     TypeDeclaration::try_from(flag).unwrap(),
                 ));
             }
-
-            &_ => return Err(ParsingError::unexpected_token(flag, reader.index, 1)),
+            // Any other flag is an error
+            _ => return Err(ParsingError::unexpected_token(flag).line(reader.index).char(1)),
         }
     }
 
+    /// Splits a line into parts and verifies it has the expected number of parts.
     fn split_definition(
         line: &String,
         expected: usize,
@@ -284,6 +307,11 @@ impl Definitions {
         Ok(split)
     }
 
+    /// Verifies that a split line has the expected number of parts.
+    /// 
+    /// Returns an error if:
+    /// - The line has fewer parts than expected
+    /// - The line has more parts than expected
     pub(super) fn check_split_size(
         split: &Vec<String>,
         expected: usize,
@@ -299,116 +327,14 @@ impl Definitions {
 
         if split.len() > expected {
             return Err(
-                ParsingError::unexpected_token_in_line(&split[expected], line_index)
-                    .because(format!("expected: {expected_err_msg}")),
+                ParsingError::unexpected_token(&split[expected]).line(line_index).because("expected").because(expected_err_msg),
             );
         }
 
         Ok(())
     }
 
-    /*
-
-    fn definition_type(line: String, line_index: usize, lines: &mut Lines) -> ParsingResult<DefinitionType> {
-
-        if line.is_empty() {
-            return Err(ParsingError::unexpected_token("end of line", line_index, 0));
-        }
-
-        let mut chars = line.chars();
-
-        let first_char = chars.next().unwrap();
-
-        // ' ' + anything -> Program Fragment (1 line)
-        if first_char == ' ' {
-            return Ok(DefinitionType::LineProgramFragment)
-        }
-
-        if first_char == '%' {
-            if line.len() < 2 {
-                return Err(ParsingError::unexpected_token("end of line", line_index, 1));
-            }
-
-            let next_char = chars.next().unwrap();
-
-            if !Self::is_valid_description_flag(next_char) {
-                return Err(ParsingError::unexpected_token(next_char, line_index, 1));
-            }
-
-            // Definition Parsing
-            let res = match next_char {
-                // %{ -> Program Fragment until '%}' delimiter (can be multiple lines)
-                '{' => {
-                    // Line not finished (block fragment are delimited by "%{\n" and "%}\n")
-                    if let Some(char) = chars.next() {
-                        return Err(ParsingError::
-                            unexpected_token(char, line_index, 2)
-                            .because("the block content should not be on the same line as the delimiter")
-                        )
-                    }
-
-                    let (content, found, index) = Utils::read_until_line("%}", lines)?;
-
-                    if found == false {
-                        return Err(ParsingError::end_of_file(index))
-                    }
-
-                    Ok(DefinitionType::BlockProgramFragment(content.join("\n")))
-                },
-
-                // % + one of (p, n, a, e, k, o) -> Table Size Declaration
-                'p' | 'n' | 'a' | 'e' | 'k' | 'o' => {
-                    let letter = next_char;
-                    let next_char = chars.next();
-
-                    if let Some(char) = next_char {
-                        if !char.is_whitespace() {
-                            // char after the letter is invalid (not whitespace)
-                            return Err(ParsingError::
-                                unexpected_token(char, line_index, 2)
-                                .because("the block content should not be on the same line as the delimiter")
-                            )
-                        }
-                    } else {
-                        // end of line
-                        return Err(ParsingError::
-                            unexpected_token("end of line", line_index, 2)
-                            .because("positive number expected")
-                        )
-                    }
-
-                    let content = line[3..].trim();
-                    let number = content.parse::<usize>()
-                        .map_err(|err| ParsingError::
-                            invalid_number(content, line_index)
-                            .because(err.to_string())
-                    )?;
-
-                    Ok(DefinitionType::TableSizeDeclaration(letter, number))
-                },
-
-                // % + one of (s, S) -> State
-                's' | 'S' => Ok(DefinitionType::State(false)),
-
-                // % + one of (x, X) -> Exclusive State
-                'x' | 'X' => Ok(DefinitionType::State(true)),
-
-                // % + other chars (invalid)
-                invalid_char => Err(ParsingError::unexpected_token(invalid_char, line_index, 1))
-            };
-
-            match chars.next() {
-                Some(' ') => { /* OK */ },
-                None => return Err(ParsingError::unexpected_token("end of line", line_index, 2)),
-                Some(invalid_char) => return Err(ParsingError::unexpected_token(invalid_char, line_index, 2))
-            }
-
-            return res
-        }
-
-     */
-
-    /// check if char after % is a valid Description Section flag
+    /// Checks if a character is a valid description section flag.
     fn is_valid_description_flag(c: char) -> bool {
         // Program Fragment
         if c == '{' {
