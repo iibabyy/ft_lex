@@ -1,77 +1,166 @@
 use super::*;
-use std::collections::HashMap;
+use std::{collections::{HashMap, HashSet}, mem::{self, take}};
 
 pub struct Definitions {
-	substitute: HashMap<String, String>,
-	fragment: Vec<String>,
+	substitutes: HashMap<String, String>,
+	fragments: Vec<String>,
 
-	// Hashmap
-	state: HashMap<String, bool>
+	type_declaration: Option<TypeDeclaration>,
+
+	table_sizes: HashMap<TableSizeDeclaration, usize>,
+
+	states: HashMap<String, bool>
 }
 
 pub enum DefinitionType {
-	LineProgramFragment,
-	BlockProgramFragment(String),
-	NameSubstitute,
-	TableSizeDeclaration(char, usize),
-
-	// the boolean tells if it's an exclusive state (true) or not (false)
-	State(bool),
-}
-
-pub enum LineType {
-	Definition(String, String),
+	TableSize(TableSizeDeclaration, usize),
 	Substitute(String, String),
-	Line(String),
-	BlockStart,
-	BlockEnd,
-	Empty
+	Fragment(String),
+	TypeDeclaration(TypeDeclaration),
+	Empty,
+	EndOfSection
 }
 
 impl Definitions {
 	pub(super) fn new() -> Self {
 		Self {
-			substitute: HashMap::new(),
-			fragment: Vec::new(),
-			state: HashMap::new(),
+			substitutes: HashMap::new(),
+			fragments: Vec::new(),
+			states: HashMap::new(),
+			table_sizes: HashMap::new(),
+			type_declaration: None
 		}
 	}
 
-	pub(super) fn add(&mut self, line: String, lines: &mut Lines) -> ParsingResult<LineType> {
+	pub(super) fn parse(&mut self, lines: &mut Lines) -> ParsingResult<&mut Self> {
 
+		let mut saved_index = 0;
+
+		while let Some((index, line)) = lines.next() {
+			saved_index = index;
+			let line = line?;
+
+			let definition = Self::line_type(line, index, lines)?;
+
+			match definition {
+				DefinitionType::TableSize(table, size) => { self.table_sizes.insert(table, size); },
+				DefinitionType::Substitute(name, substitute) => { self.substitutes.insert(name, substitute); },
+				DefinitionType::Fragment(fragment) => { self.fragments.push(fragment); },
+				DefinitionType::TypeDeclaration(type_decla) => { self.type_declaration = Some(type_decla) },
+				
+				DefinitionType::Empty => { },
+				DefinitionType::EndOfSection => return Ok(self),
+			}
+		}
+
+		return Err(ParsingError::end_of_file(saved_index));
 	}
 
-	fn line_type(line: String, line_index: usize) -> ParsingResult<LineType> {
+	fn line_type(line: String, line_index: usize, lines: &mut Lines) -> ParsingResult<DefinitionType> {
 
 		if line.is_empty() {
-			return Ok(LineType::Empty)
+			return Ok(DefinitionType::Empty)
+		}
+
+		if line == "%%" {
+			return Ok(DefinitionType::EndOfSection);
 		}
 
 		let mut chars = line.chars();
 
 		let first_char = chars.next().unwrap();
 
+		// Line Program Fragment
 		if first_char == ' ' {
-			let res = line[1..].trim().split_ascii_whitespace();
-
-			let name = res.next();
-			if name.is_none() {
-				return Err(ParsingError::end_of_line(line_index).because("Definition starting by a space, expected: {name} {substitution}"))
-			}
-
-			let substitution = res.next();
-			if substitution.is_none() {
-				return Err(ParsingError::end_of_line(line_index).because("Definition starting by a space, expected: {name} {substitution}"))
-			}
-
-			if let Some(invalid_token) = res.next() {
-				return Err(ParsingError::unexpected_token(invalid_token, line_index, char_index))
-			}
-
-			return Ok(LineType::Substitute((), ()))
+			return Ok(DefinitionType::Fragment(line[1..].to_string()))
 		}
 
-		todo!()
+		// Substitution Chains
+		if first_char.is_alphabetic() || first_char == '_' {
+			let mut split = Self::split_definition(&line, 2, line_index, "{name} {substitute}")?;
+			
+			return Ok(DefinitionType::Substitute(
+				take(&mut split[0]),	// name
+				take(&mut split[1])	// substitute
+			));
+		}
+
+		// Block Program Fragments
+		if line == "%{" {
+			let (content, found, last_index) = Utils::read_until_line("%}", lines)?;
+
+			if !found {
+				return Err(ParsingError::
+					end_of_file(last_index)
+					.because(format!("expected close matching delimiter for open delimiter at line {line_index}"))
+				);
+			}
+
+			let content = content.join("\n");
+
+			return Ok(DefinitionType::Fragment(content))
+		}
+
+		// Only possibility left is '%', Syntax error else
+		if first_char != '%' {
+			return Err(ParsingError::unexpected_token(first_char, line_index, 0));
+		}
+
+		let mut split: Vec<String> = line[1..].split_ascii_whitespace().map(|str| str.to_string()).collect();
+
+		// empty
+		if split.is_empty() {
+			return Ok(DefinitionType::Empty)
+		}
+
+		let flag = take(&mut split[0]);
+
+		match flag.as_str() {
+			"p" | "n" | "a" | "e" |"k" | "o" => {
+				Self::check_split_size(&split, 2, line_index, "{flag} {positive number}")?;
+
+				let size = split[1].as_str().parse::<usize>()
+					.map_err(|err|ParsingError::
+						invalid_number(&split[1], line_index)
+						.because(format!("{err}"))
+					)?;
+				
+				let char = flag.chars().next().unwrap();
+
+				return Ok(DefinitionType::TableSize(TableSizeDeclaration::try_from(char).unwrap(), size));
+			},
+
+			"array" | "pointer" => {
+				Self::check_split_size(&split, 1, line_index, "{type}")?;
+
+				return Ok(DefinitionType::TypeDeclaration(TypeDeclaration::try_from(flag).unwrap()))
+			}
+
+			&_ => return Err(ParsingError::unexpected_token(flag, line_index, 1))
+		}
+	}
+
+	fn split_definition(line: &String, expected: usize, line_index: usize, expected_err_msg: impl ToString) -> ParsingResult<Vec<String>> {
+		let split: Vec<String> = line.split_ascii_whitespace().map(|str| str.to_string()).collect();
+		let expected_err_msg = expected_err_msg.to_string();
+
+		Self::check_split_size(&split, expected, line_index, expected_err_msg)?;
+
+		Ok(split)
+	}
+
+	pub(super) fn check_split_size(split: &Vec<String>, expected: usize, line_index: usize, expected_err_msg: impl ToString) -> ParsingResult<()> {
+		let expected_err_msg = expected_err_msg.to_string();
+		
+		if split.len() < expected {
+			return Err(ParsingError::end_of_line(line_index).because(format!("expected: {expected_err_msg}")))
+		}
+
+		if split.len() > expected {
+			return Err(ParsingError::unexpected_token_in_line(&split[2], line_index).because(format!("expected: {expected_err_msg}")))
+		}
+
+		Ok(())
 	}
 
 	/*

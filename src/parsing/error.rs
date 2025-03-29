@@ -33,6 +33,14 @@ impl ParsingError {
 		))
 	}
 
+	pub fn unexpected_token_in_line(token: impl ToString, line_index: usize) -> Self {
+		ParsingError::Syntax(format!(
+			"lexer.{} unexpected token '{}'" ,
+			line_index + 1,
+			token.to_string()
+		))
+	}
+
 	pub fn end_of_file(line_index: usize) -> ParsingError {
 		ParsingError::Syntax(format!(
 			"lexer.{} unexpected end of file",

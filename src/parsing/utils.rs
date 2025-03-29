@@ -1,5 +1,62 @@
 use super::*;
 
+pub enum TypeDeclaration {
+	Array,
+	Pointer
+}
+
+impl ToString for TypeDeclaration {
+	fn to_string(&self) -> String {
+		match self {
+			TypeDeclaration::Array => "array",
+			TypeDeclaration::Pointer => "pointer",
+		}.to_string()
+	}
+}
+
+impl TryFrom<String> for TypeDeclaration {
+	type Error = ();
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		match value.as_str() {
+			"array" => Ok(Self::Array),
+			"pointer" => Ok(Self::Pointer),
+			_ => Err(())
+		}
+	}
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum TableSizeDeclaration {
+	P,
+	N,
+	A,
+	E,
+	K,
+	O
+}
+
+impl TableSizeDeclaration {
+	pub fn try_from(letter: impl ToString) -> Result<Self, ()> {
+		let letter = letter.to_string();
+		if letter.is_empty() {
+			return Err(())
+		}
+
+		let letter = letter.chars().next().unwrap();
+		match letter {
+			'p' => Ok(TableSizeDeclaration::P),
+			'n' => Ok(TableSizeDeclaration::N),
+			'a' => Ok(TableSizeDeclaration::A),
+			'e' => Ok(TableSizeDeclaration::E),
+			'k' => Ok(TableSizeDeclaration::K),
+			'o' => Ok(TableSizeDeclaration::O),
+
+			_ => Err(())
+		}
+	}
+}
+
 pub struct Utils {}
 
 impl Utils {
@@ -38,7 +95,7 @@ impl Utils {
 			return Ok((res, rest))
 		}
 
-		while let Some((line_index, line)) = lines.next() {
+		while let Some((_, line)) = lines.next() {
 			let line = line?;
 			let delimitor_len = delimiter.len();
 			let saved_line_len = actual_line.len();
