@@ -7,7 +7,6 @@ mod arg;
 use arg::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let config = Config::init();
 
     dbg!(&config);

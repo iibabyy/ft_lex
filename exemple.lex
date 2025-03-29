@@ -1,8 +1,10 @@
 %{
-#include <stdio.h>
-#include <stdlib.h>
-
-int num_lines = 0;
+  #include <stdio.h>
+  #include <stdlib.h>
+%}
+%{
+  int num_lines = 0;
+  int foo = 12;
 %}
 
 %p 2500
