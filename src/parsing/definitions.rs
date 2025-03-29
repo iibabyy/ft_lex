@@ -1,6 +1,7 @@
 use super::*;
 use std::{collections::{HashMap, HashSet}, mem::{self, take}};
 
+#[derive(Debug)]
 pub struct Definitions {
 	substitutes: HashMap<String, String>,
 	fragments: Vec<String>,
@@ -17,6 +18,7 @@ pub enum DefinitionType {
 	Substitute(String, String),
 	Fragment(String),
 	TypeDeclaration(TypeDeclaration),
+	StateDeclaration(String, bool),
 	Empty,
 	EndOfSection
 }
@@ -43,16 +45,53 @@ impl Definitions {
 			match Self::line_type(line, index, lines)? {
 
 				// Table Size ('%{letter} {size}')
-				DefinitionType::TableSize(table, size) => { self.table_sizes.insert(table, size); },
+				DefinitionType::TableSize(table, size) => {
+
+					if let Some(previous_size) = self.table_sizes.insert(table, size) {
+						// Duplicate Declaration
+						eprintln!("Warning: Duplicate table size declaration for {} : previous value ({}) replaced by {}",
+							table.to_string(), previous_size, size
+						)
+					}
+				},
 				
 				// Substitute ('{name} {substitute}')
-				DefinitionType::Substitute(name, substitute) => { self.substitutes.insert(name, substitute); },
+				DefinitionType::Substitute(name, substitute) => {
+
+					if let Some(previous_substitute) = self.substitutes.insert(name.clone(), substitute.clone()) {
+						// Duplicate Declaration
+						eprintln!("Warning: Duplicate Substitution declaration for {} : previous value ({}) replaced by {}",
+							name, previous_substitute, substitute
+						)
+					}
+				},
+				
+				// State ('{state name}')
+				DefinitionType::StateDeclaration(state_name, exclusive) => {
+
+					if let Some(previous_exclusive) = self.states.insert(state_name.clone(), exclusive) {
+						// Duplicate Declaration
+						eprintln!("Warning: Duplicate State declaration for {} : previous value ({}) replaced by {}",
+							state_name, previous_exclusive, exclusive
+						)
+					}
+				},
 				
 				// Fragment (' {Program fragment}' or '%{\n{Program fragment}\n%}')
 				DefinitionType::Fragment(fragment) => { self.fragments.push(fragment); },
 				
 				// Type of yytext ('%array' or '%pointer')
-				DefinitionType::TypeDeclaration(type_decla) => { self.type_declaration = Some(type_decla) },
+				DefinitionType::TypeDeclaration(type_decla) => {
+
+					if self.type_declaration.is_some() && self.type_declaration != Some(type_decla) {
+						// Duplicate Declaration
+						eprintln!("Warning: Duplicate type declaration declaration : previous value (%{}) replaced by %{}",
+							self.type_declaration.unwrap().to_string(), type_decla.to_string()
+						)
+					}
+
+					self.type_declaration = Some(type_decla)
+				},
 				
 				// Empty line
 				DefinitionType::Empty => { },
@@ -62,7 +101,11 @@ impl Definitions {
 			}
 		}
 
-		return Err(ParsingError::end_of_file(saved_index));
+		// No End of Section ('%%') found
+		return Err(ParsingError::
+			end_of_file(saved_index)
+			.because("expected '%%'")
+		);
 	}
 
 	fn line_type(line: String, line_index: usize, lines: &mut Lines) -> ParsingResult<DefinitionType> {
@@ -86,11 +129,16 @@ impl Definitions {
 
 		// Substitution Chains
 		if first_char.is_alphabetic() || first_char == '_' {
-			let mut split = Self::split_definition(&line, 2, line_index, "{name} {substitute}")?;
-			
+			let split = Utils::split_whitespace_once(&line)
+				.ok_or_else(|| ParsingError::syntax("incomplete name definition", line_index))?;
+
+			if !Utils::is_iso_C_normed(split.0) {
+				return Err(ParsingError::syntax("name must be iso-C normed", line_index));
+			}
+
 			return Ok(DefinitionType::Substitute(
-				take(&mut split[0]),	// name
-				take(&mut split[1])	// substitute
+				split.0.to_string(),	// name
+				split.1.to_string()	// substitute
 			));
 		}
 
@@ -125,6 +173,19 @@ impl Definitions {
 		let flag = take(&mut split[0]);
 
 		match flag.as_str() {
+			"s" | "S" | "x" | "X" => {
+				Self::check_split_size(&split, 1, line_index, "{state name}")?;
+
+				let state_name = take(&mut split[1]);
+
+				if !Utils::is_iso_C_normed(&state_name) {
+					return Err(ParsingError::syntax("states must be iso-C normed", line_index));
+				}
+
+				let exclusive = flag == "x" || flag == "X";
+
+				return Ok(DefinitionType::StateDeclaration(state_name, exclusive))
+			}
 			"p" | "n" | "a" | "e" |"k" | "o" => {
 				Self::check_split_size(&split, 2, line_index, "{flag} {positive number}")?;
 
@@ -134,9 +195,7 @@ impl Definitions {
 						.because(format!("{err}"))
 					)?;
 				
-				let char = flag.chars().next().unwrap();
-
-				return Ok(DefinitionType::TableSize(TableSizeDeclaration::try_from(char).unwrap(), size));
+				return Ok(DefinitionType::TableSize(TableSizeDeclaration::try_from(flag).unwrap(), size));
 			},
 
 			"array" | "pointer" => {

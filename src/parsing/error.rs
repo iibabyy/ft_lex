@@ -33,9 +33,17 @@ impl ParsingError {
 		))
 	}
 
+	pub fn syntax(err: impl ToString, line_index: usize) -> Self {
+		ParsingError::Syntax(format!(
+			"{}: {}" ,
+			line_index + 1,
+			err.to_string()
+		))
+	}
+
 	pub fn unexpected_token_in_line(token: impl ToString, line_index: usize) -> Self {
 		ParsingError::Syntax(format!(
-			"lexer.{} unexpected token '{}'" ,
+			"{} unexpected token '{}'" ,
 			line_index + 1,
 			token.to_string()
 		))
@@ -43,21 +51,21 @@ impl ParsingError {
 
 	pub fn end_of_file(line_index: usize) -> ParsingError {
 		ParsingError::Syntax(format!(
-			"lexer.{} unexpected end of file",
+			"{} unexpected end of file",
 			line_index
 		))
 	}
 
 	pub fn end_of_line(line_index: usize) -> ParsingError {
 		ParsingError::Syntax(format!(
-			"lexer.{} unexpected newline",
+			"{} unexpected newline",
 			line_index
 		))
 	}
 
 	pub fn invalid_number(number: impl ToString, line_index: usize) -> Self {
 		ParsingError::Syntax(format!(
-			"lexer.{} invalid number: {}",
+			"{} invalid number: {}",
 			line_index, number.to_string()
 		))
 	}

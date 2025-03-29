@@ -14,6 +14,14 @@ type Lines = std::iter::Enumerate<io::Lines<BufReader<File>>>;
 
 pub struct Parsing {
 	definitions: Definitions,
+
+	arg: Vec<Option<String>>,
+
+	lines: Lines,
+
+	line: Option<String>,
+
+	line_number: usize,
 	
 	// section actually being parsed
 	section: Section
@@ -53,39 +61,33 @@ impl Parsing {
 		self.section = self.section.next();
 	}
 
-	pub fn parse(&mut self, path: String) -> ParsingResult<()> {
+	pub fn parse(&mut self, args: Vec<Option<String>>) -> ParsingResult<()> {
 
-		let file = std::fs::File::open(path)?;
+		for arg in args {
+			let path = arg.unwrap();
 
-		let reader = BufReader::new(file);
+			let file = std::fs::File::open(path)?;
 
-		let mut lines: Lines = reader.lines().enumerate();
+			let reader = BufReader::new(file);
 
-		while let Some((line_index, line)) = lines.next() {
-			let line = line?;
+			let mut lines: Lines = reader.lines().enumerate();
 
-			if self.is_section_delimiter(line, line_index)? {
-				self.next_section();
-				continue;
-			}
+			loop {
+				match self.section {
+					Section::Definitions => { self.definitions.parse(&mut lines)?; eprintln!("{:#?}", self.definitions) },
 
-			match self.section {
-				Section::Definitions => {
-					
-				},
+					Section::Rules => {
+						eprintln!("TODO: Rules Section");
+						return Ok(())
+					},
 
-				Section::Rules => {
-
-				},
-
-				Section::Subroutines => {
-
+					Section::Subroutines => {
+						eprintln!("TODO: Subroutines Section");
+						return Ok(())
+					}
 				}
 			}
-
 		}
-
-		todo!()
 	}
 
 	fn parse_definition(line: String, lines: Lines) -> ParsingResult<()> {
@@ -112,5 +114,13 @@ impl Parsing {
 		}
 
 		Ok(true)
+	}
+
+	fn next_line(&mut self) -> io::Result<Option<String>> {
+		if let Some((line_index, line)) = self.lines.next() {
+
+		} else {
+
+		}
 	}
 }

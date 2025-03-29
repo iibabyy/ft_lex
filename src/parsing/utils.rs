@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TypeDeclaration {
 	Array,
 	Pointer
@@ -26,7 +27,7 @@ impl TryFrom<String> for TypeDeclaration {
 	}
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum TableSizeDeclaration {
 	P,
 	N,
@@ -34,6 +35,19 @@ pub enum TableSizeDeclaration {
 	E,
 	K,
 	O
+}
+
+impl ToString for TableSizeDeclaration {
+	fn to_string(&self) -> String {
+		match self {
+			TableSizeDeclaration::P => "p",
+			TableSizeDeclaration::N => "n",
+			TableSizeDeclaration::A => "a",
+			TableSizeDeclaration::E => "e",
+			TableSizeDeclaration::K => "k",
+			TableSizeDeclaration::O => "o",
+		}.to_string()
+	}
 }
 
 impl TableSizeDeclaration {
@@ -62,7 +76,7 @@ pub struct Utils {}
 impl Utils {
 
 	#[allow(non_snake_case)]
-	pub fn is_iso_C_normed(str: String) -> bool {
+	pub fn is_iso_C_normed(str: &str) -> bool {
 
 		if str.is_empty() {
 			return false;
@@ -159,6 +173,16 @@ impl Utils {
 
 		// Not found, returning the line readed
 		Ok((res, false, line_index))
+	}
+
+	pub fn split_whitespace_once(str: &str) -> Option<(&str, &str)> {
+		let index = str.find(|c: char| c.is_whitespace())?;
+
+		let (str1, mut str2) = str.split_at(index);
+
+		str2 = str2.trim_ascii_start();
+
+		Some((str1, str2))
 	}
 
 }
