@@ -66,22 +66,45 @@ impl Parsing {
     /// (definitions, rules, subroutines) in sequence.
     pub fn parse(&mut self, config: &Config) -> ParsingResult<()> {
         // Create an iterator over the config arguments
-        let mut iter = config.args.iter().map(|arg| arg.as_ref());
+        let mut args = config.args.iter()
+            .map(|arg| arg.as_ref());
 
-        while let Some(arg) = iter.next() {
+        let mut error: Option<ParsingError> = None;
+
+        while let Some(arg) = args.next() {
+            self.section = Section::Definitions;
+
             if let Some(path) = arg {
-                let mut reader = reader_from_file(path)
-                    .map_err(|err| ParsingError::from(err).file(path))?;
-                
-                // For file input, create a reader and parse with file context
-                self.parse_sections(&mut reader)?;
-            } else {
-                let mut reader = reader_from_stdin()
-                    .map_err(|err| ParsingError::from(err).file("<stdin>"))?;
+                let reader = reader_from_file(path)
+                    .map_err(|err| ParsingError::from(err).file(path));
 
+                if let Err(err) = reader {
+                    error = error.or(Some(err));
+                    continue;
+                }
+
+                // For file input, create a reader and parse with file context
+                if let Err(err) = self.parse_sections(&mut reader.unwrap()) {
+                    error = error.or(Some(err));
+                }
+            } else {
+                let reader = reader_from_stdin()
+                    .map_err(|err| ParsingError::from(err).file("<stdin>"));
+
+                if let Err(err) = reader {
+                    error = error.or(Some(err));
+                    continue;
+                }
+    
                 // For stdin input, create a reader and parse with stdin context
-                self.parse_sections(&mut reader)?;
+                if let Err(err) = self.parse_sections(&mut reader.unwrap()) {
+                    error = error.or(Some(err));
+                }
             }
+        }
+
+        if error.is_some() {
+            return Err(error.unwrap())
         }
 
         Ok(())

@@ -61,6 +61,7 @@ impl Config {
             if arg == "-" {
                 // stdin input
                 config.args.push(None);
+                continue;
             }
 
             if arg.starts_with("--") {
