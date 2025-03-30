@@ -10,7 +10,7 @@ int mot_compte = 0;
 /* Définitions de chaînes de substitution Lex */
 CHIFFRE [1-9]
 LETTRE [a-zA-Z]
-ALPHANUMÉRIQUE {LETTRE}|{CHIFFRE}
+ALPHANUMERIQUE {LETTRE}|{CHIFFRE}
 ESPACE [ \t\n]
 
 /* Définition des états de départ */
@@ -30,7 +30,6 @@ ESPACE [ \t\n]
 /* %pointer */
 
 %%
-/* Section des règles: expressions régulières et actions correspondantes */
 
     /* Code C inséré au début de la fonction yylex() */
     int ligne_debut_a = 0;
@@ -101,12 +100,11 @@ debut_exclusif {
     /* Ignorer les caractères dans les commentaires */
 }
 
-//.*$ {
+"//".*$ {
     /* Commentaire sur une seule ligne (ignoré) */
 }
 
-{LETTRE}{ALPHANUMÉRIQUE}* {
-    /* Un identifiant */
+{ALPHANUMERIQUE}* {
     printf("IDENTIFIANT: %s\n", yytext);
     mot_compte++;
 }
@@ -136,9 +134,7 @@ debut_exclusif {
     }
 }
 
-"ou bien" {
-    /* Utilisation de l'action | pour la même action que la règle suivante */
-|
+"ou bien" |
 "autre choix" {
     printf("Alternative détectée.\n");
 }

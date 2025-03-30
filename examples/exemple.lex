@@ -17,10 +17,10 @@
 
 %array
 
-%s COMMENT FOO BAR FOO
-%x STRING FOO
+%s COMMENT FOO
+%x STRING
 
-FOO                    [0-9] [a-z]      
+DIGIT       [0-9]    
 ALPHA      [A-Za-z]
 ID         {ALPHA}({ALPHA}|{DIGIT})*
 HEX        \\x[0-9A-Fa-f]{1,2}

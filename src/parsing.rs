@@ -9,10 +9,7 @@ use error::*;
 use utils::*;
 
 use std::{
-    fs::File,
-    io::{self, BufRead, BufReader, Read, Stdin},
-    os::unix::fs::FileExt,
-    path::PathBuf,
+    fs::File, io::{self, BufRead, BufReader, Read, Stdin}, mem::take, os::unix::fs::FileExt, path::PathBuf
 };
 
 /// Type alias for an iterator over file lines with line numbers
@@ -24,7 +21,7 @@ pub struct Reader<R: Read> {
     path: PathBuf,
 
     /// Iterator over the lines of the input
-    lines: Lines<R>,
+    reader: BufReader<R>,
 
     /// The current line being processed
     line: Option<String>,
@@ -33,47 +30,59 @@ pub struct Reader<R: Read> {
     index: usize,
 }
 
-/// Trait defining the interface for file readers in the lexer.
-pub trait FReader {
-    /// Returns the path of the file being read
-    fn path(&self) -> &PathBuf;
-    /// Returns a mutable reference to the path
-    fn path_mut(&mut self) -> &mut PathBuf;
-    /// Returns the next line from the input
-    fn next(&self) -> io::Result<Option<&String>>;
-    /// Returns the current line
-    fn line(&self) -> Option<&String>;
-    /// Returns a mutable reference to the current line
-    fn line_mut(&mut self) -> Option<&mut String>;
-    /// Returns the current line number
-    fn index(&self) -> usize;
-}
-
 impl<R: Read> Reader<R> {
     /// Creates a new reader from an input source and path.
     fn new(reader: R, path: PathBuf) -> Reader<R> {
-        let buf_reader = BufReader::new(reader);
-        let lines = io::BufRead::lines(buf_reader).enumerate();
+        let reader = BufReader::new(reader);
 
         Reader {
             path,
-            lines,
+            reader,
             line: None,
             index: 0,
         }
     }
 
-    /// Advances the reader to the next line and returns a reference to it.
+    /// Read one byte, and convert it to a char.
+    /// 
     /// Returns `None` when the end of input is reached.
-    pub fn next(&mut self) -> io::Result<Option<&String>> {
-        if let Some((index, line)) = self.lines.next() {
-            self.line = Some(line?);
-            self.index = index;
-            Ok(self.line.as_ref())
-        } else {
-            self.line = None;
-            Ok(None)
+    pub fn next(&mut self) -> io::Result<Option<char>> {
+        let mut buf = [0u8; 1];
+
+        // reading one byte into buf
+        if let Err(err) = self.reader.read_exact(&mut buf) {
+            if err.kind() == io::ErrorKind::UnexpectedEof {
+                return Ok(None)
+            }
+
+            return Err(err);
+        };
+
+        // converting buf into char
+        Ok(Some(char::from(buf[0])))
+    }
+
+    /// Read until '\n' and returns a reference to the string readed.
+    /// 
+    /// Returns `None` when the end of input is reached.
+    /// 
+    /// If reader.next() has been call on the beginning on the line, this method will returns the remaining part of the line
+    pub fn line(&mut self) -> io::Result<Option<&String>> {
+        let mut line = String::new();
+
+        self.reader.read_line(&mut line)?;
+        if line.ends_with('\n') {
+            self.index += 1;
+            line.pop();
         }
+        self.line = Some(line);
+
+        Ok(Some(self.line.as_ref().unwrap()))
+    }
+
+    /// Returns the last readed line
+    pub fn last_line(&self) -> Option<&String> {
+        self.line.as_ref()
     }
 }
 
@@ -94,6 +103,8 @@ pub fn reader_from_stdin() -> Reader<io::Stdin> {
 pub struct Parsing {
     /// Collection of lexer definitions (substitutions, fragments, etc.)
     pub definitions: Definitions,
+
+    pub errors: Vec<ParsingError>,
 
     /// The current section being parsed
     section: Section,
@@ -127,6 +138,7 @@ impl Parsing {
     pub fn new() -> io::Result<Self> {
         Ok(Self {
             definitions: Definitions::new(),
+            errors: Vec::new(),
             section: Section::Definitions,
         })
     }
@@ -159,29 +171,48 @@ impl Parsing {
     /// This function handles the parsing of each section (definitions, rules, subroutines)
     /// and advances to the next section when appropriate.
     fn parse_section<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<()> {
-        loop {
+        'big_loop: loop {
             match self.section {
                 Section::Definitions => {
                     // Parse the definitions section (substitutions, fragments, etc.)
-                    self.definitions.parse(reader)?;
-                    
+                    while let Err(err) = self.definitions.parse(reader) {
+                        self.errors.push(
+                            err.file(reader.path.to_string_lossy().to_string())
+                        );
+
+                        match self.errors.last().unwrap().type_ {
+                            ParsingErrorType::Io(_) => break 'big_loop,
+
+                            // To parse all the file even if there is a syntax error
+                            _ => {}
+                        }
+                    }
+
                     // Move to the rules section after definitions are parsed
                     self.next_section();
                 }
                 Section::Rules => {
                     // TODO: Implement rules section parsing
                     eprintln!("TODO: Rules Section");
-                    return Ok(());
+                    break;
                 }
                 Section::Subroutines => {
                     // TODO: Implement subroutines section parsing
                     eprintln!("TODO: Subroutines Section");
-                    return Ok(());
+                    break;
                 }
             }
         }
-        // Note: This loop only exits through the return statements in the Rules and Subroutines branches
-        // Once the Definitions branch has completed, it loops back and enters the Rules branch
+
+        if self.errors.is_empty() == false {
+            self.errors.sort();
+            self.errors.iter().for_each(|err| eprintln!("{}", err.to_string()));
+            return Err(
+                std::mem::replace(&mut self.errors[0], ParsingError::syntax("foo"))
+            )
+        }
+
+        Ok(())
     }
 
     /// Checks if a line is a section delimiter ("%%").

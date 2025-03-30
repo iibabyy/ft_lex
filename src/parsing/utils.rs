@@ -120,7 +120,7 @@ impl Utils {
 
         let mut save = actual_line.unwrap_or(String::new());
 
-        while let Some(line) = reader.next()? {
+        while let Some(line) = reader.line()? {
             let delimitor_len = delimiter.len();
             let saved_line_len = save.len();
 
@@ -155,7 +155,7 @@ impl Utils {
 
         let mut res = vec![];
 
-        match reader.next()? {
+        match reader.line()? {
             // line matching delimiter
             Some(line) if line == &delimiter_line => return Ok((vec![], true)),
 
@@ -166,7 +166,7 @@ impl Utils {
             None => return Ok((res, false)),
         };
 
-        while let Some(line) = reader.next()? {
+        while let Some(line) = reader.line()? {
             // line matching delimiter
             if line == &delimiter_line {
                 return Ok((res, true));

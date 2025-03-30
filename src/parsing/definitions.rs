@@ -115,14 +115,9 @@ impl Definitions {
                 }
                 DefinitionType::StateDeclaration(state_type, states_names) => {
                     for name in states_names {
-                        if let Some(previous_state_type) = self.states.insert(name.clone(), state_type) {
-                            if  previous_state_type != state_type {
-                                eprintln!("Warning: Duplicate State declaration for `{}`: previous value (`{}`) replaced by `{}`",
-                                    name, previous_state_type.to_string(), state_type.to_string()
-                                )
-                            } else {
-                                eprintln!("Warning: Duplicate State declaration for `{}`", name)
-                            }
+                        if let Some(_)= self.states.insert(name.clone(), state_type) {
+                            // Duplicate Value
+							return Err(ParsingError::syntax(format!("start condition {} declared twice", name)).line(reader.index));
                         }
                     }
                 }
@@ -154,7 +149,7 @@ impl Definitions {
     /// - Section delimiter
     fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
         let line = reader
-            .next()?
+            .line()?
             .cloned()
             .ok_or(ParsingError::end_of_file(reader.index))?;
 
@@ -196,25 +191,30 @@ impl Definitions {
 
         // Block Program Fragments: multi-line C code blocks
         // Format: %{ ... %}
-        if line == "%{" {
+        if line.starts_with("%{") {
             let open_dilimiter_index = reader.index;
             
             // Read all lines until closing delimiter %}
             let (content, found) = Utils::read_until_line("%}", reader)?;
-
+			
             // Check if the closing delimiter was found or if we reached EOF
             if !found {
-                return Err(ParsingError::
+				return Err(ParsingError::
                     end_of_file(reader.index)
                     .because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
                 );
             }
-
+			
             // Join the lines with newlines and add extra newlines at start and end
             // This ensures proper separation in the generated code
             let mut content = content.join("\n");
             content.insert(0, '\n');
             content.push('\n');
+
+			// If something after %{, insert it at the beginning
+			if line.len() > 2 {
+				content.insert_str(0, &line[2..]);
+			}
 
             return Ok(DefinitionType::Fragment(content));
         }

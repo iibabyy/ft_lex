@@ -23,13 +23,32 @@ pub struct ParsingError {
     char_index: Option<usize>,
 
     /// The type of error that occurred
-    type_: ParsingErrorType,
+    pub type_: ParsingErrorType,
 
     /// Additional error messages that provide context about the error
     causes: Vec<String>
 }
 
 impl std::error::Error for ParsingError {}
+
+impl Eq for ParsingError {}
+impl PartialEq for ParsingError {
+    fn eq(&self, other: &Self) -> bool {
+        self.char_index == other.char_index
+    }
+}
+
+impl Ord for ParsingError {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // partial_cmp always work for this struct
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl PartialOrd for ParsingError {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.char_index.cmp(&other.char_index))
+    }
+}
 
 impl std::fmt::Display for ParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,7 +89,7 @@ impl std::fmt::Display for ParsingError {
         });
 
         write!(f,
-            "{} : {}{}",
+            "{}: {}{}",
             file, message, causes
         )
     }
