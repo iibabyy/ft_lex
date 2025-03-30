@@ -8,6 +8,8 @@ pub enum ParsingErrorType {
     Io(std::io::Error),
     /// A syntax error occurred during parsing
     Syntax(String),
+
+    UnexpectedEof(String)
 }
 
 /// A structured error type for parsing operations that includes context about where and why the error occurred.
@@ -55,6 +57,7 @@ impl std::fmt::Display for ParsingError {
         let message = match &self.type_ {
             ParsingErrorType::Io(err) => err.to_string(),
             ParsingErrorType::Syntax(err) => err.to_string(),
+            ParsingErrorType::UnexpectedEof(err) => err.to_string(),
         };
 
         let line_and_char_index = if self.line_index.is_some() {
@@ -124,6 +127,17 @@ impl ParsingError {
         }
     }
 
+    /// Creates a new syntax error with the given message.
+    fn eof(err: impl ToString) -> Self {
+        Self {
+            char_index: None,
+            line_index: None,
+            file: None,
+            type_: ParsingErrorType::UnexpectedEof(err.to_string()),
+            causes: Vec::new()
+        }
+    }
+
     /// Adds file context to the error.
     pub fn file(mut self, file: impl ToString) -> Self {
         self.file = Some(file.to_string());
@@ -155,16 +169,22 @@ impl ParsingError {
         Self::syntax(err)
     }
 
+    pub fn invalid_flag(token: impl ToString) -> Self {
+        let err = format!("unrecognized '%' directive: `{}`", token.to_string());
+
+        Self::syntax(err)
+    }
+
     /// Creates an error for an unexpected end of file.
-    pub fn end_of_file(line_index: usize) -> ParsingError {
-        let err = "unexpected end of file";
-        Self::syntax(err).line(line_index)
+    pub fn end_of_file() -> ParsingError {
+        let err: &str = "unexpected end of file";
+        Self::eof(err)
     }
 
     /// Creates an error for an unexpected end of line.
-    pub fn end_of_line(line_index: usize) -> ParsingError {
+    pub fn end_of_line() -> ParsingError {
         let err = "unexpected end of line";
-        ParsingError::syntax(err).line(line_index)
+        ParsingError::syntax(err)
     }
 
     /// Creates an error for an invalid number format.

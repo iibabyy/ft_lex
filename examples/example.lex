@@ -17,8 +17,8 @@
 
 %array
 
-%s COMMENT FOO
-%x STRING
+%ssdds COMMENT FOO
+%x STRING   
 
 DIGIT       [0-9]    
 ALPHA      [A-Za-z]
@@ -26,20 +26,12 @@ ID         {ALPHA}({ALPHA}|{DIGIT})*
 HEX        \\x[0-9A-Fa-f]{1,2}
 %%
 
-<INITIAL>{
-  "/*"         { BEGIN(COMMENT); }
-  \"           { BEGIN(STRING); }
-  {ID}         { printf("ID: %s\n", yytext); }
-  {DIGIT}+     { printf("NUMBER: %s\n", yytext); }
-  \n           { num_lines++; }
-  [ \t]+       
-  .            { printf("Unknown: %s\n", yytext); }
-}
+<INITIAL>{ BEGIN(COMMENT); }
+
+<COMMENT>"/asd"         { BEGIN(COMMENT); }
 
 <COMMENT>{
-  "*/"        { BEGIN(INITIAL); }
-  \n          { num_lines++; }
-  .           
+  {DIGIT}a        { BEGIN(INITIAL); }
 }
 
 <STRING>{

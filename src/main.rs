@@ -15,10 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut parser = Parsing::new()?;
 
-    if let Err(err) = parser.parse(&config) {
-        eprintln!("{}", err.to_string());
-        Err(err)?;
-    }
+    parser.parse(&config)?;
 
     dbg!(parser.definitions);
 

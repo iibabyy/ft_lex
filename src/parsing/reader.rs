@@ -1,86 +1,96 @@
+use std::{
+    io::{stdin, Bytes, Lines},
+    iter::Enumerate,
+    str::Chars,
+};
+
 use super::*;
 
-
-/// A reader that provides line-by-line access to a file or stdin with position tracking.
+#[derive(Debug)]
 pub struct Reader<R: Read> {
-    /// The path to the file being read, or "<stdin>" for stdin
-    pub(super) path: PathBuf,
+    chars: Bytes<BufReader<R>>,
 
-    /// Iterator over the lines of the input
-    reader: BufReader<R>,
+    filename: String,
 
-    /// The current line being processed
-    pub(super) line: Option<String>,
+    line_index: usize,
 
-    /// The current line number (0-based)
-    pub(super) index: usize,
+    end_of_line: bool,
 }
 
 impl<R: Read> Reader<R> {
-    /// Creates a new reader from an input source and path.
-    fn new(reader: R, path: PathBuf) -> Reader<R> {
-        let reader = BufReader::new(reader);
+    pub fn new(file: R, path: impl ToString) -> io::Result<Self> {
+        let reader = BufReader::new(file);
 
-        Reader {
-            path,
-            reader,
-            line: None,
-            index: 0,
-        }
+        let chars = reader.bytes();
+
+        Ok(Self {
+            chars,
+            filename: path.to_string(),
+            line_index: 0,
+            end_of_line: false,
+        })
     }
 
-    /// Read one byte, and convert it to a char.
-    /// 
-    /// Returns `None` when the end of input is reached.
-    pub fn next(&mut self) -> io::Result<Option<char>> {
-        let mut buf = [0u8; 1];
+    pub fn next(&mut self) -> io::Result<Option<u8>> {
+        if self.end_of_line == true {
+            self.line_index += 1;
+            self.end_of_line = false;
+        }
 
-        // reading one byte into buf
-        if let Err(err) = self.reader.read_exact(&mut buf) {
-            if err.kind() == io::ErrorKind::UnexpectedEof {
-                return Ok(None)
+        if let Some(char) = self.chars.next() {
+            let char = char?;
+
+            if char == '\n' as u8 {
+                self.end_of_line = true;
             }
 
-            return Err(err);
-        };
-
-        // converting buf into char
-        Ok(Some(char::from(buf[0])))
+            Ok(Some(char))
+        } else {
+            Ok(None)
+        }
     }
 
-    /// Read until '\n' and returns a reference to the string readed.
-    /// 
-    /// Returns `None` when the end of input is reached.
-    /// 
-    /// If reader.next() has been call on the beginning on the line, this method will returns the remaining part of the line
-    pub fn line(&mut self) -> io::Result<Option<&String>> {
+    pub fn line(&mut self) -> io::Result<Option<String>> {
         let mut line = String::new();
 
-        self.reader.read_line(&mut line)?;
-        if line.ends_with('\n') {
-            self.index += 1;
-            line.pop();
+        loop {
+            if let Some(char) = self.next()? {
+                if char == '\n' as u8 {
+                    return Ok(Some(line));
+                }
+
+                line.push(char as char);
+            } else {
+                if line.is_empty() == false {
+                    return Ok(Some(line))
+                }
+
+                return Ok(None);
+            }
         }
-        self.line = Some(line);
-
-        Ok(Some(self.line.as_ref().unwrap()))
     }
 
-    /// Returns the last readed line
-    pub fn last_line(&self) -> Option<&String> {
-        self.line.as_ref()
+    // /// returns the last readed line
+    // pub fn char(&self) -> Option<&u8> {
+    //     self.readed_chars.last()
+    // }
+
+    // Returns the index of the line
+    pub fn index(&self) -> usize {
+        self.line_index
+    }
+
+    pub fn filename(&self) -> &str {
+        &self.filename
     }
 }
 
-/// Creates a reader from a file path.
-pub fn reader_from_file(file_path: impl Into<PathBuf>) -> io::Result<Reader<File>> {
-    let path = file_path.into();
+pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {
     let file = File::open(&path)?;
-    Ok(Reader::new(file, path))
+
+    Reader::new(file, &path)
 }
 
-/// Creates a reader from stdin.
-pub fn reader_from_stdin() -> Reader<io::Stdin> {
-    let stdin = io::stdin();
-    Reader::new(stdin, PathBuf::from("<stdin>"))
+pub fn reader_from_stdin() -> io::Result<Reader<Stdin>> {
+    Reader::new(stdin(), "<stdin>")
 }

@@ -94,7 +94,7 @@ impl Definitions {
     /// - State declarations (%s, %x)
     /// 
     /// Returns an error if any definition is invalid or if the section delimiter is missing.
-    pub(super) fn parse<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<&mut Self> {
+    pub(super) fn parse<'de, R: Read>(&'de mut self, reader: &mut Reader<R>) -> ParsingResult<&'de mut Self> {
         loop {
             match Self::line_type(reader)? {
                 DefinitionType::TableSize(table, size) => {
@@ -117,7 +117,7 @@ impl Definitions {
                     for name in states_names {
                         if let Some(_)= self.states.insert(name.clone(), state_type) {
                             // Duplicate Value
-							return Err(ParsingError::syntax(format!("start condition {} declared twice", name)).line(reader.index));
+							return Err(ParsingError::syntax(format!("start condition {} declared twice", name)));
                         }
                     }
                 }
@@ -150,8 +150,7 @@ impl Definitions {
     fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
         let line = reader
             .line()?
-            .cloned()
-            .ok_or(ParsingError::end_of_file(reader.index))?;
+            .ok_or(ParsingError::end_of_file())?;
 
         if line.is_empty() {
             return Ok(DefinitionType::Empty);
@@ -176,11 +175,11 @@ impl Definitions {
         if first_char.is_alphabetic() || first_char == '_' {
             // Split into name and substitute text (first whitespace only)
             let split = Utils::split_whitespace_once(&line)
-                .ok_or(ParsingError::syntax("incomplete name definition").line(reader.index))?;
+                .ok_or(ParsingError::syntax("incomplete name definition"))?;
 
             // Validate that the name follows C naming conventions
             if !Utils::is_iso_C_normed(split.0) {
-                return Err(ParsingError::syntax(format!("`{}`", split.0)).line(reader.index).because("name must be iso-C normed"));
+                return Err(ParsingError::syntax(format!("`{}`", split.0)).because("name must be iso-C normed"));
             }
 
             return Ok(DefinitionType::Substitute(
@@ -192,15 +191,14 @@ impl Definitions {
         // Block Program Fragments: multi-line C code blocks
         // Format: %{ ... %}
         if line.starts_with("%{") {
-            let open_dilimiter_index = reader.index;
+            let open_dilimiter_index = reader.index();
             
             // Read all lines until closing delimiter %}
             let (content, found) = Utils::read_until_line("%}", reader)?;
 			
             // Check if the closing delimiter was found or if we reached EOF
             if !found {
-				return Err(ParsingError::
-                    end_of_file(reader.index)
+				return Err(ParsingError::end_of_file()
                     .because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
                 );
             }
@@ -221,7 +219,7 @@ impl Definitions {
 
         // The remaining cases all start with '%' - flag-based declarations
         if first_char != '%' {
-            return Err(ParsingError::unexpected_token(first_char).line(reader.index).char(0));
+            return Err(ParsingError::unexpected_token(first_char));
         }
 
         // Split the line into words after the % character
@@ -241,7 +239,7 @@ impl Definitions {
             // State declarations (%s for inclusive, %x for exclusive)
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
-                    return Err(ParsingError::end_of_line(reader.index).because(format!("`%{flag} {{STATE_NAME}}`")))
+                    return Err(ParsingError::end_of_line().because(format!("`%{flag} {{STATE_NAME}}`")))
                 }
 
                 let states_type = StateType::try_from(flag.as_str()).unwrap();
@@ -252,7 +250,7 @@ impl Definitions {
                 // Validate that all state names follow C naming conventions
                 for name in &split {
                     if !Utils::is_iso_C_normed(name) {
-                        return Err(ParsingError::syntax(format!("`{name}`")).because("states must be iso-C normed").line(reader.index));
+                        return Err(ParsingError::syntax(format!("`{name}`")).because("states must be iso-C normed"));
                     }
                 }
 
@@ -264,11 +262,11 @@ impl Definitions {
             // Table size declarations (%p, %n, %a, %e, %k, %o followed by a number)
             "p" | "n" | "a" | "e" | "k" | "o" => {
                 // Ensure the format is correct: %flag number
-                Self::check_split_size(&split, 2, reader.index, format!("`%{flag} {{POSITIVE_NUMBER}}`"))?;
+                Self::check_split_size(&split, 2, format!("`%{flag} {{POSITIVE_NUMBER}}`"))?;
 
                 // Parse the size as a positive number
                 let size = split[1].as_str().parse::<usize>().map_err(|err| {
-                    ParsingError::invalid_number(&split[1]).line(reader.index).because(err.to_string())
+                    ParsingError::invalid_number(&split[1]).because(err.to_string())
                 })?;
 
                 return Ok(DefinitionType::TableSize(
@@ -279,13 +277,13 @@ impl Definitions {
             // Type declarations (%array or %pointer)
             "array" | "pointer" => {
                 // Ensure there are no unexpected tokens after the type
-                Self::check_split_size(&split, 1, reader.index, format!("`%{flag}`"))?;
+                Self::check_split_size(&split, 1, format!("`%{flag}`"))?;
                 return Ok(DefinitionType::TypeDeclaration(
                     TypeDeclaration::try_from(flag).unwrap(),
                 ));
             }
             // Any other flag is an error
-            _ => return Err(ParsingError::unexpected_token(format!("%{flag}")).line(reader.index).char(1)),
+            _ => return Err(ParsingError::invalid_flag(format!("%{flag}"))),
         }
     }
 
@@ -293,7 +291,6 @@ impl Definitions {
     fn split_definition(
         line: &String,
         expected: usize,
-        line_index: usize,
         expected_err_msg: impl ToString,
     ) -> ParsingResult<Vec<String>> {
         let split: Vec<String> = line
@@ -302,7 +299,7 @@ impl Definitions {
             .collect();
         let expected_err_msg = expected_err_msg.to_string();
 
-        Self::check_split_size(&split, expected, line_index, expected_err_msg)?;
+        Self::check_split_size(&split, expected, expected_err_msg)?;
 
         Ok(split)
     }
@@ -315,19 +312,18 @@ impl Definitions {
     pub(super) fn check_split_size(
         split: &Vec<String>,
         expected: usize,
-        line_index: usize,
         expected_err_msg: impl ToString,
     ) -> ParsingResult<()> {
         let expected_err_msg = expected_err_msg.to_string();
 
         if split.len() < expected {
-            return Err(ParsingError::end_of_line(line_index)
+            return Err(ParsingError::end_of_line()
                 .because(format!("expected: {expected_err_msg}")));
         }
 
         if split.len() > expected {
             return Err(
-                ParsingError::unexpected_token(&split[expected]).line(line_index).because("expected").because(expected_err_msg),
+                ParsingError::unexpected_token(&split[expected]).because("expected").because(expected_err_msg),
             );
         }
 

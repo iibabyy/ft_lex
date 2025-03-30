@@ -155,10 +155,10 @@ impl Utils {
 
         match reader.line()? {
             // line matching delimiter
-            Some(line) if line == &delimiter_line => return Ok((vec![], true)),
+            Some(line) if line == delimiter_line => return Ok((vec![], true)),
 
             // other line
-            Some(_) => res.push(take(reader.line.as_mut().unwrap())),
+            Some(line) => res.push(line),
 
             // end of the file (no remaining lines)
             None => return Ok((res, false)),
@@ -166,16 +166,13 @@ impl Utils {
 
         while let Some(line) = reader.line()? {
             // line matching delimiter
-            if line == &delimiter_line {
+            if line == delimiter_line {
                 return Ok((res, true));
             }
 
             // taking and replacing the reader's last line
-            res.push(take(reader.line.as_mut().unwrap()));
+            res.push(line);
         }
-
-        // setting the reader's last line to the last readed line
-        reader.line = res.last().cloned();
 
         // Not found, returning the lines readed
         Ok((res, false))
