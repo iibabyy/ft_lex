@@ -1,8 +1,8 @@
 #![allow(dead_code, unused_imports, unreachable_code)]
 
-mod parsing;
 use std::fmt::{Debug, Formatter};
 
+mod parsing;
 use parsing::*;
 
 mod arg;

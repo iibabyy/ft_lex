@@ -1,6 +1,4 @@
-use std::mem::take;
-
-use super::*;
+use super::{reader::Reader, *};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TypeDeclaration {
