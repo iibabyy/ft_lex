@@ -189,6 +189,12 @@ impl ParsingError {
         Self::warning(err)
     }
 
+    pub fn unrecognized_rule() -> Self {
+        let err = format!("unrecognized rule");
+
+        Self::syntax(err)
+    }
+
     pub fn invalid_flag(token: impl ToString) -> Self {
         let err = format!("unrecognized '%' directive: `{}`", token.to_string());
 

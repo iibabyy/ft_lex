@@ -26,13 +26,14 @@ ID         {ALPHA}({ALPHA}|{DIGIT})*
 HEX        \\x[0-9A-Fa-f]{1,2}
 %%
 
-<INITIAL>{ BEGIN(COMMENT); }
 
 <COMMENT>"/asd"         { BEGIN(COMMENT); }
 
 <COMMENT>{
   {DIGIT}a        { BEGIN(INITIAL); }
 }
+
+" AHAH""   printf("ahah");
 
 <STRING>{
   \"          { BEGIN(INITIAL); }

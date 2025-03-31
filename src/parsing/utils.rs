@@ -145,15 +145,67 @@ impl Utils {
         Ok((None, save))
     }
 
-    pub fn read_until_valid(chars: &mut Chars) -> Result<(&str, &str), &str> {
+    pub fn read_until_valid<'a>(line: &'a str, p: impl Fn(char) -> bool) -> Option<(String, &'a str)> {
+        let mut res = String::new();
+        let mut skip_until: Vec<char> = vec![];
+
+        let mut chars = line.chars();
 
         while let Some(c) = chars.next() {
+            let until = skip_until.last();
+
             match c {
-                
+                // End quotes
+                '\"' if until == Some(&'\"') => {
+                    res.push('\"');
+                    skip_until.pop();
+                },
+
+                // Start quotes
+                '\"'  => {
+                    res.push('\"');
+                    skip_until.push('\"');
+                },
+
+                // In quotes
+                c if until == Some(&'\"') => {
+                    res.push(c);
+                },
+
+                // Start brackets
+                '[' => {
+                    res.push(c);
+                    skip_until.push(']');
+                },
+
+                ']' if until == Some(&']') => {
+                    res.push(c);
+                    skip_until.pop();
+                }
+
+                '\\' => {
+                    // Push the '\'
+                    res.push('\\');
+
+                    // Push the next char (if exists)
+                    // It will be interpreted later
+                    if let Some(c) = chars.next() {
+                        res.push(c);
+                    } else {
+                        break;
+                    }
+                },
+
+                c if p(c) == true => {
+                    res.push(c);
+                    return Some((res, chars.as_str()))
+                },
+
+                c => res.push(c),
             }
         }
 
-        todo!()
+        return None
     }
 
     /// Return true if found, false if not. The strings vec is all the lines readed, excluding the delimiter line if found
@@ -191,11 +243,11 @@ impl Utils {
         Ok((res, false))
     }
 
-    pub fn backslashed(c: u8) -> u8 {
+    pub fn backslashed(c: char) -> char {
         match c {
-            b'n' => b'\n',
-            b't' => b'\t',
-            b'r' => b'\r',
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
             _ => c
         }
     }
