@@ -13,18 +13,44 @@ impl<R: Read> RuleLexer<R> {
 
 	pub fn next(&mut self) -> io::Result<Option<RuleToken>> {
 
-		while let Some(c) = self.reader.next()? {
-			match c {
+		let c = loop {
+			let char = self.reader.next()?;
 
+			if char.is_none() {
+				return Ok(None);
+			}
 
+			if char.unwrap() != b'\n' {
+				break char.unwrap();
+			}
+		};
 
-				_ => { todo!() }
+		match c as char {
+			// C code to put in the final file
+			' ' => todo!(),
+
+			// State
+			'<' => todo!(),
+
+			// List of REGEX + ACTION
+			'{' => todo!(),
+
+			// if %%: End of section
+			// else if %{: C code to put in the final file
+			// else simple character
+			'%' => todo!(),
+
+			// simple character
+			_ => {
+				
 			}
 		}
 
 		todo!()
 	}
 }
+
+
 
 impl<R: Read> Iterator for RuleLexer<R> {
 	type Item = io::Result<RuleToken>;

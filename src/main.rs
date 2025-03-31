@@ -8,6 +8,11 @@ use parsing::*;
 mod arg;
 use arg::*;
 
+mod regex;
+use regex::*;
+
+// TODO: error if '\' or '/' in Description section
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::init();
 

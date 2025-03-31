@@ -17,8 +17,8 @@
 
 %array
 
-%ssdds COMMENT FOO
-%x STRING   
+%s COMMENT FOO
+%x STRING
 
 DIGIT       [0-9]    
 ALPHA      [A-Za-z]

@@ -178,6 +178,15 @@ impl Utils {
         Ok((res, false))
     }
 
+    pub fn backslashed(c: u8) -> u8 {
+        match c {
+            b'n' => b'\n',
+            b't' => b'\t',
+            b'r' => b'\r',
+            _ => c
+        }
+    }
+
     pub fn split_whitespace_once(str: &str) -> Option<(&str, &str)> {
         let index = str.find(|c: char| c.is_whitespace())?;
 

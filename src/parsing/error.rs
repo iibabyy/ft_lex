@@ -9,7 +9,9 @@ pub enum ParsingErrorType {
     /// A syntax error occurred during parsing
     Syntax(String),
 
-    UnexpectedEof(String)
+    UnexpectedEof(String),
+
+    Warning(String)
 }
 
 /// A structured error type for parsing operations that includes context about where and why the error occurred.
@@ -58,6 +60,7 @@ impl std::fmt::Display for ParsingError {
             ParsingErrorType::Io(err) => err.to_string(),
             ParsingErrorType::Syntax(err) => err.to_string(),
             ParsingErrorType::UnexpectedEof(err) => err.to_string(),
+            ParsingErrorType::Warning(err) => err.to_string()
         };
 
         let line_and_char_index = if self.line_index.is_some() {
@@ -128,6 +131,17 @@ impl ParsingError {
     }
 
     /// Creates a new syntax error with the given message.
+    pub fn warning(err: impl ToString) -> Self {
+        Self {
+            char_index: None,
+            line_index: None,
+            file: None,
+            type_: ParsingErrorType::Warning(err.to_string()),
+            causes: Vec::new()
+        }
+    }
+
+    /// Creates a new syntax error with the given message.
     fn eof(err: impl ToString) -> Self {
         Self {
             char_index: None,
@@ -167,6 +181,12 @@ impl ParsingError {
     pub fn unexpected_token(token: impl ToString) -> Self {
         let err = format!("unexpected token `{}`", token.to_string());
         Self::syntax(err)
+    }
+
+    /// Creates an error for an unexpected token.
+    pub fn warning_unexpected_token(token: impl ToString) -> Self {
+        let err = format!("unexpected token `{}`", token.to_string());
+        Self::warning(err)
     }
 
     pub fn invalid_flag(token: impl ToString) -> Self {
