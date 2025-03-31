@@ -1,3 +1,5 @@
+use std::str::Chars;
+
 use super::{reader::Reader, *};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -141,6 +143,17 @@ impl Utils {
 
         // Not found, returning the line readed
         Ok((None, save))
+    }
+
+    pub fn read_until_valid(chars: &mut Chars) -> Result<(&str, &str), &str> {
+
+        while let Some(c) = chars.next() {
+            match c {
+                
+            }
+        }
+
+        todo!()
     }
 
     /// Return true if found, false if not. The strings vec is all the lines readed, excluding the delimiter line if found

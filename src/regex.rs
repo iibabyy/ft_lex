@@ -44,7 +44,6 @@ impl Regex {
 		while let Some(c) = chars.next() {
 
 			let c_type = match c {
-				'\'' => { todo!() },
 				c if c.is_numeric() => RegexType::Number(c),
 				c if c.is_alphabetic() || c == '_' => RegexType::Char(c),
 	
@@ -68,14 +67,20 @@ impl Regex {
 				'^' => RegexType::Hat,
 	
 				'$' => RegexType::Dollar,
-	
+
 				'\\' => {
 					let c = chars.next()
 						.unwrap_or('\\');
-	
-					let c = Utils::backslashed(c as u8);
-	
-					RegexType::Char(c as char)
+
+					RegexType::Char(Utils::backslashed(c as u8) as char)
+				},
+
+				'\"' => {
+					let litteral = c.to_string();
+
+					while let Some(c) = chars.next() {
+						if c ==
+					}
 				},
 	
 				c => return Err(ParsingError::unexpected_token(c)),
