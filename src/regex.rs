@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, fmt, str::Chars};
+mod re2post;
+mod nfa;
+
+use std::{collections::VecDeque, fmt, ops, str::Chars};
 use crate::parsing::{error::{ParsingError, ParsingResult}, utils::Utils};
 
 use super::*;
@@ -11,17 +14,13 @@ pub struct Regex {
     output_stack: Vec<RegexType>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegexType {
     Char(char),
-    OpenBracket,
-    CloseBracket,
     QuestionMark,
     Hat,
     Dollar,
     Star,
-    OpenBrace,
-    CloseBrace,
     Comma,
     OpenParenthesis,
     CloseParenthesis,
@@ -30,29 +29,11 @@ pub enum RegexType {
     Plus,
     Or,
     Concatenation,
-    ShorthandClass(ShorthandClass),
-    None
+    Class(CharacterClass),
+    Quant(Quantifier),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShorthandClass {
-    /// [0-9]
-    Digit,
-    /// [^0-9]
-    NonDigit,
-
-    /// [a-zA-Z0-9_]
-    WordChar,
-    /// [^a-zA-Z0-9_]
-    NonWordChar,
-
-    /// [ \t\r\n\f\v]
-    WhiteSpace,
-    /// [^ \t\r\n\f\v]
-    NonWhiteSpace,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenType {
     Literal(RegexType),
     Opening(RegexType),
@@ -62,21 +43,64 @@ pub enum TokenType {
     StartOrEndCondition(RegexType),
 }
 
-// 2. DISPLAY IMPLEMENTATIONS
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CharacterClass {
+    // Whether this is a negated class [^...]
+    negated: bool,
+    // Individual characters in the class
+    singles: Vec<char>,
+    // Character ranges in the class
+    ranges: Vec<(char, char)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Quantifier {
+    // {n}
+    Exact(usize),
+    // {n,}
+    AtLeast(usize),
+    // {n,m}
+    Range(usize, usize),
+}
+
+// 2. CONVERSION IMPLEMENTATIONS
+// ===========================
+
+impl ops::Deref for TokenType {
+    type Target = RegexType;
+
+    fn deref(&self) -> &Self::Target {
+        self.into_inner()
+    }
+}
+
+impl TokenType {
+    /// Converts a TokenType back to its inner RegexType
+    pub fn into_inner(&self) -> &RegexType {
+        match self {
+            TokenType::Literal(rt) => rt,
+            TokenType::Opening(rt) => rt,
+            TokenType::Closing(rt) => rt,
+            TokenType::UnaryOperator(rt) => rt,
+            TokenType::BinaryOperator(rt) => rt,
+            TokenType::StartOrEndCondition(rt) => rt,
+        }
+    }
+}
+
+
+
+// 3. DISPLAY IMPLEMENTATIONS
 // =========================
 
 impl fmt::Display for RegexType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RegexType::Char(c) => write!(f, "{}", c),
-            RegexType::OpenBracket => write!(f, "["),
-            RegexType::CloseBracket => write!(f, "]"),
             RegexType::QuestionMark => write!(f, "?"),
             RegexType::Hat => write!(f, "^"),
             RegexType::Dollar => write!(f, "$"),
             RegexType::Star => write!(f, "*"),
-            RegexType::OpenBrace => write!(f, "{{"),
-            RegexType::CloseBrace => write!(f, "}}"),
             RegexType::Comma => write!(f, ","),
             RegexType::OpenParenthesis => write!(f, "("),
             RegexType::CloseParenthesis => write!(f, ")"),
@@ -84,22 +108,9 @@ impl fmt::Display for RegexType {
             RegexType::Minus => write!(f, "-"),
             RegexType::Plus => write!(f, "+"),
             RegexType::Or => write!(f, "|"),
-            RegexType::Concatenation => write!(f, "·"),
-            RegexType::ShorthandClass(sc) => write!(f, "{}", sc),
-            RegexType::None => write!(f, "`None`"),
-        }
-    }
-}
-
-impl fmt::Display for ShorthandClass {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ShorthandClass::Digit => write!(f, r"\d"),
-            ShorthandClass::NonDigit => write!(f, r"\D"),
-            ShorthandClass::WordChar => write!(f, r"\w"),
-            ShorthandClass::NonWordChar => write!(f, r"\W"),
-            ShorthandClass::WhiteSpace => write!(f, r"\s"),
-            ShorthandClass::NonWhiteSpace => write!(f, r"\S"),
+            RegexType::Concatenation => write!(f, "&"),
+            RegexType::Class(c) => write!(f, "{}", c),
+            RegexType::Quant(q) => write!(f, "{}", q),
         }
     }
 }
@@ -117,44 +128,49 @@ impl fmt::Display for TokenType {
     }
 }
 
-// 3. CONVERSION IMPLEMENTATIONS
-// ============================
-
-impl TryFrom<char> for ShorthandClass {
-    type Error = ();
-
-    /// valid values:
-    /// d/D w/W s/S
-    fn try_from(value: char) -> Result<Self, Self::Error> {
-        let res = match value {
-            'd' => ShorthandClass::Digit,
-            'D' => ShorthandClass::NonDigit,
-            
-            'w' => ShorthandClass::WordChar,
-            'W' => ShorthandClass::NonWordChar,
-            
-            's' => ShorthandClass::WhiteSpace,
-            'S' => ShorthandClass::NonWhiteSpace,
-
-            _ => return Err(())
-        };
-
-        Ok(res)
+impl fmt::Display for CharacterClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        
+        if self.negated {
+            write!(f, "^")?;
+        }
+        
+        // Print individual characters
+        for &c in &self.singles {
+            write!(f, "{}", c)?;
+        }
+        
+        // Print ranges
+        for &(start, end) in &self.ranges {
+            write!(f, "{}-{}", start, end)?;
+        }
+        
+        write!(f, "]")
     }
 }
+
+impl fmt::Display for Quantifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Quantifier::Exact(n) => write!(f, "{{{}}}", n),
+            Quantifier::AtLeast(n) => write!(f, "{{{},}}", n),
+            Quantifier::Range(min, max) => write!(f, "{{{},{}}}", min, max),
+        }
+    }
+}
+
+// 4. CONVERSION IMPLEMENTATIONS
+// ============================
 
 impl From<RegexType> for TokenType {
     fn from(value: RegexType) -> Self {
         match value {
             // Opening group
-            RegexType::OpenParenthesis
-                | RegexType::OpenBrace
-                | RegexType::OpenBracket => TokenType::Opening(value),
+            RegexType::OpenParenthesis => TokenType::Opening(value),
 
             // Closing group
-            RegexType::CloseParenthesis
-                | RegexType::CloseBrace
-                | RegexType::CloseBracket => TokenType::Closing(value),
+            RegexType::CloseParenthesis => TokenType::Closing(value),
 
             // One element operator
             RegexType::Star
@@ -175,7 +191,7 @@ impl From<RegexType> for TokenType {
     }
 }
 
-// 4. TYPE-SPECIFIC METHODS
+// 5. TYPE-SPECIFIC METHODS
 // =======================
 
 impl RegexType {
@@ -194,14 +210,10 @@ impl RegexType {
     pub fn type_(&self) -> TokenType {
         match self {
             // Opening group
-            RegexType::OpenParenthesis
-                | RegexType::OpenBrace
-                | RegexType::OpenBracket => TokenType::Opening(self.clone()),
+            RegexType::OpenParenthesis => TokenType::Opening(self.clone()),
 
             // Closing group
-            RegexType::CloseParenthesis
-                | RegexType::CloseBrace
-                | RegexType::CloseBracket => TokenType::Closing(self.clone()),
+            RegexType::CloseParenthesis => TokenType::Closing(self.clone()),
 
             // One element operator
             RegexType::Star
@@ -260,7 +272,7 @@ impl TokenType {
     }
 }
 
-// 5. REGEX PARSING IMPLEMENTATION
+// 6. REGEX PARSING IMPLEMENTATION
 // ==============================
 
 impl Regex {
@@ -270,8 +282,9 @@ impl Regex {
         let tokens_with_concatenation = Self::add_concatenation(tokens);
 
         for token in &tokens_with_concatenation {
-            eprint!("{}", token.to_string())
+            eprint!("{} ", token.to_string())
         }
+        eprintln!();
 
         Ok(tokens_with_concatenation)
     }
@@ -318,6 +331,8 @@ impl Regex {
         while let Some(c) = chars.next() {
             match c {
                 '"' => Self::add_string(&mut tokens, &mut chars)?,
+                '[' => Self::add_character_class(&mut tokens, &mut chars)?,
+                '{' => Self::add_quantifier(&mut tokens, &mut chars)?,
                 c => tokens.push_back(Self::into_type(c, &mut chars)),
             }
         }
@@ -352,25 +367,83 @@ impl Regex {
         return Err(ParsingError::unrecognized_rule().because("Unclosed string"));
     }
 
+    /// Handle character classes ([...])
+    pub fn add_character_class(tokens: &mut VecDeque<RegexType>, chars: &mut Chars<'_>) -> ParsingResult<()> {
+        let class = CharacterClass::parse(chars)?;
+        tokens.push_back(RegexType::Class(class));
+        Ok(())
+    }
+
+    /// Handle quantifiers ({n}, {n,}, {n,m})
+    pub fn add_quantifier(tokens: &mut VecDeque<RegexType>, chars: &mut Chars<'_>) -> ParsingResult<()> {
+        let mut digits1 = String::new();
+        let mut digits2 = String::new();
+        let mut saw_comma = false;
+        
+        while let Some(c) = chars.next() {
+            match c {
+                '0'..='9' => {
+                    if saw_comma {
+                        digits2.push(c);
+                    } else {
+                        digits1.push(c);
+                    }
+                },
+                ',' => {
+                    saw_comma = true;
+                },
+                '}' => {
+                    let quant = if !saw_comma {
+                        // {n}
+                        let n = digits1.parse::<usize>()
+                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        Quantifier::Exact(n)
+                    } else if digits2.is_empty() {
+                        // {n,}
+                        let n = digits1.parse::<usize>()
+                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        Quantifier::AtLeast(n)
+                    } else {
+                        // {n,m}
+                        let n = digits1.parse::<usize>()
+                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        let m = digits2.parse::<usize>()
+                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        
+                        if n > m {
+                            return Err(ParsingError::unrecognized_rule().because("Invalid quantifier range: min > max"));
+                        }
+                        
+                        Quantifier::Range(n, m)
+                    };
+                    
+                    tokens.push_back(RegexType::Quant(quant));
+                    return Ok(());
+                },
+                _ => {
+                    return Err(ParsingError::unrecognized_rule().because("Invalid character in quantifier"));
+                }
+            }
+        }
+        
+        Err(ParsingError::unrecognized_rule().because("Unclosed quantifier"))
+    }
+
     pub fn into_type(c: char, chars: &mut Chars<'_>) -> RegexType {
         match c {
-            '[' => RegexType::OpenBracket,
-            ']' => RegexType::CloseBracket,
-
-            '{' => RegexType::OpenBrace,
-            '}' => RegexType::CloseBrace,
-
-            '(' => RegexType::OpenParenthesis,
-            ')' => RegexType::CloseParenthesis,
+            '*' => RegexType::Star,
 
             '.' => RegexType::Dot,
 
-            '-' => RegexType::Minus,
             '+' => RegexType::Plus,
+
+            '-' => RegexType::Minus,
 
             ',' => RegexType::Comma,
 
-            '*' => RegexType::Star,
+            '(' => RegexType::OpenParenthesis,
+
+            ')' => RegexType::CloseParenthesis,
 
             '^' => RegexType::Hat,
 
@@ -381,22 +454,239 @@ impl Regex {
             '|' => RegexType::Or,
 
             '\\' => {
-                let c = chars.next()
-                    .unwrap_or('\\');
-
-                let interpreted = Utils::backslashed(c);
-
-                let is_class = ShorthandClass::try_from(c);
-
-                if let Ok(class) = is_class {
-                    RegexType::ShorthandClass(class)
-                } else {
-                    RegexType::Char(interpreted)
+                let next_c = chars.next().unwrap_or('\\');
+                
+                // Check if it's a shorthand character class
+                match next_c {
+                    'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
+                        if let Ok(class) = CharacterClass::from_shorthand(next_c) {
+                            RegexType::Class(class)
+                        } else {
+                            RegexType::Char(Utils::backslashed(next_c))
+                        }
+                    },
+                    // Handle other escape sequences
+                    _ => RegexType::Char(Utils::backslashed(next_c))
                 }
             },
 
             c => RegexType::Char(c),
         }
+    }
+}
+
+impl CharacterClass {
+    pub fn new() -> Self {
+        Self {
+            negated: false,
+            singles: Vec::new(),
+            ranges: Vec::new(),
+        }
+    }
+
+    pub fn negated(mut self) -> Self {
+        self.negated = true;
+        self
+    }
+
+    pub fn add_char(&mut self, c: char) {
+        // Only add if not already in a range or singles
+        if !self.contains_char(c) {
+            self.singles.push(c);
+        }
+    }
+
+    // Private method to remove a character from singles
+    fn remove_char(&mut self, c: char) {
+        if let Some(index) = self.singles.iter().position(|&x| x == c) {
+            self.singles.swap_remove(index);
+        }
+    }
+
+    pub fn add_range(&mut self, start: char, end: char) {
+        // Validate the range
+        if start <= end {
+            // Check for overlaps with existing ranges
+            if !self.ranges.iter().any(|(s, e)| *s <= start && end <= *e) {
+                self.ranges.push((start, end));
+            }
+        }
+    }
+
+    // Check if a character is contained in this class
+    pub fn contains_char(&self, c: char) -> bool {
+        self.singles.contains(&c) || 
+        self.ranges.iter().any(|(start, end)| *start <= c && c <= *end)
+    }
+
+    // Check if a character matches this class (considering negation)
+    pub fn matches(&self, c: char) -> bool {
+        let contains = self.contains_char(c);
+        if self.negated {
+            !contains
+        } else {
+            contains
+        }
+    }
+
+    // Constructor for a single character class
+    pub fn single(c: char) -> Self {
+        let mut class = Self::new();
+        class.add_char(c);
+        class
+    }
+
+    // Constructor for a range class
+    pub fn range(start: char, end: char) -> Self {
+        let mut class = Self::new();
+        class.add_range(start, end);
+        class
+    }
+
+    // Merge two character classes
+    pub fn merge(&mut self, other: &CharacterClass) {
+        // Only merge non-negated classes
+        if !other.negated {
+            // Add all singles from other
+            for &c in &other.singles {
+                self.add_char(c);
+            }
+            
+            // Add all ranges from other
+            for &(start, end) in &other.ranges {
+                self.add_range(start, end);
+            }
+        }
+    }
+
+    // Parse a character class from a string
+    pub fn parse(chars: &mut std::str::Chars) -> ParsingResult<Self> {
+        let mut class = Self::new();
+        let mut negated = false;
+        let mut prev_char: Option<char> = None;
+        
+        // Check for negation
+        if let Some('^') = chars.clone().next() {
+            negated = true;
+            chars.next(); // Consume the '^'
+        }
+        
+        while let Some(c) = chars.next() {
+            match c {
+                ']' => {
+                    if negated {
+                        class = class.negated();
+                    }
+                    return Ok(class);
+                }
+                '-' => {
+                    // Range definition
+                    if let Some(start) = prev_char {
+                        if let Some(end) = chars.next() {
+                            if end == ']' {
+                                // '-' at the end is a literal character
+                                class.add_char('-');
+                                return Ok(class);
+                            } else {
+                                class.add_range(start, end);
+                                class.remove_char(start); // Remove the start char as it's now part of a range
+                                prev_char = None;
+                            }
+                        } else {
+                            return Err(ParsingError::unrecognized_rule().because("Unclosed character class"));
+                        }
+                    } else {
+                        // '-' at the beginning is a literal character
+                        class.add_char('-');
+                    }
+                }
+                '\\' => {
+                    // Handle escape sequences
+                    if let Some(next_c) = chars.next() {
+                        let interpreted = Utils::backslashed(next_c);
+                        class.add_char(interpreted);
+                        prev_char = Some(interpreted);
+                    } else {
+                        return Err(ParsingError::unrecognized_rule().because("Escape sequence at end of character class"));
+                    }
+                }
+                c => {
+                    class.add_char(c);
+                    prev_char = Some(c);
+                }
+            }
+        }
+        
+        Err(ParsingError::unrecognized_rule().because("Unclosed character class"))
+    }
+
+    // Compatibility methods to create instances that match the old enum API
+    pub fn from_single(c: char) -> Self {
+        let mut class = Self::new();
+        class.add_char(c);
+        class
+    }
+    
+    pub fn from_range(start: char, end: char) -> Self {
+        let mut class = Self::new();
+        class.add_range(start, end);
+        class
+    }
+    
+    pub fn from_negated(other: CharacterClass) -> Self {
+        let mut class = other;
+        class.negated = true;
+        class
+    }
+
+    // Create a character class from a shorthand character class like \d, \w, etc.
+    pub fn from_shorthand(c: char) -> ParsingResult<Self> {
+        match c {
+            'd' => Ok(Self::digit()),
+            'D' => Ok(Self::non_digit()),
+            'w' => Ok(Self::word_char()),
+            'W' => Ok(Self::non_word_char()),
+            's' => Ok(Self::whitespace()),
+            'S' => Ok(Self::non_whitespace()),
+            _ => Err(ParsingError::unrecognized_rule().because(&format!("Unknown shorthand class \\{}", c))),
+        }
+    }
+
+    // Predefined character classes
+    pub fn digit() -> Self {
+        let mut class = Self::new();
+        class.add_range('0', '9');
+        class
+    }
+
+    pub fn non_digit() -> Self {
+        Self::digit().negated()
+    }
+
+    pub fn word_char() -> Self {
+        let mut class = Self::new();
+        class.add_range('a', 'z');
+        class.add_range('A', 'Z');
+        class.add_range('0', '9');
+        class.add_char('_');
+        class
+    }
+
+    pub fn non_word_char() -> Self {
+        Self::word_char().negated()
+    }
+
+    pub fn whitespace() -> Self {
+        let mut class = Self::new();
+        // Add all whitespace characters
+        for c in [' ', '\t', '\r', '\n', '\u{000C}', '\u{000B}'] {
+            class.add_char(c);
+        }
+        class
+    }
+
+    pub fn non_whitespace() -> Self {
+        Self::whitespace().negated()
     }
 }
 
@@ -418,8 +708,6 @@ mod tests {
     #[test]
     fn test_into_type_special_chars() {
         let mut chars = "".chars();
-        assert!(matches!(Regex::into_type('[', &mut chars), RegexType::OpenBracket));
-        assert!(matches!(Regex::into_type(']', &mut chars), RegexType::CloseBracket));
         assert!(matches!(Regex::into_type('(', &mut chars), RegexType::OpenParenthesis));
         assert!(matches!(Regex::into_type(')', &mut chars), RegexType::CloseParenthesis));
         assert!(matches!(Regex::into_type('*', &mut chars), RegexType::Star));
@@ -432,16 +720,21 @@ mod tests {
     #[test]
     fn test_into_type_escape_sequences() {
         let mut chars = "d".chars();
-        assert!(matches!(
-            Regex::into_type('\\', &mut chars),
-            RegexType::ShorthandClass(ShorthandClass::Digit)
-        ));
+        if let RegexType::Class(class) = Regex::into_type('\\', &mut chars) {
+            assert!(class.matches('0'));
+            assert!(!class.matches('a'));
+        } else {
+            panic!("Expected a CharacterClass for digit");
+        }
         
         let mut chars = "w".chars();
-        assert!(matches!(
-            Regex::into_type('\\', &mut chars),
-            RegexType::ShorthandClass(ShorthandClass::WordChar)
-        ));
+        if let RegexType::Class(class) = Regex::into_type('\\', &mut chars) {
+            assert!(class.matches('a'));
+            assert!(class.matches('_'));
+            assert!(!class.matches(' '));
+        } else {
+            panic!("Expected a CharacterClass for word char");
+        }
         
         let mut chars = "n".chars();
         if let RegexType::Char(c) = Regex::into_type('\\', &mut chars) {
@@ -488,6 +781,126 @@ mod tests {
         let input = "\"abc".to_string();
         let result = Regex::tokens(&input);
         assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_tokens_with_character_classes() -> ParsingResult<()> {
+        let input = "a[bc]d".to_string();
+        let tokens = Regex::tokens(&input)?;
+        
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[0], RegexType::Char('a')));
+        
+        if let RegexType::Class(class) = &tokens[1] {
+            assert!(class.contains_char('b'));
+            assert!(class.contains_char('c'));
+            assert!(!class.contains_char('a'));
+        } else {
+            panic!("Expected a character class");
+        }
+        
+        assert!(matches!(tokens[2], RegexType::Char('d')));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_tokens_with_negated_character_class() -> ParsingResult<()> {
+        let input = "[^abc]".to_string();
+        let tokens = Regex::tokens(&input)?;
+        
+        assert_eq!(tokens.len(), 1);
+        
+        if let RegexType::Class(class) = &tokens[0] {
+            assert!(class.negated);
+            assert!(!class.matches('a'));
+            assert!(class.matches('x'));
+        } else {
+            panic!("Expected a character class");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_tokens_with_shorthand_classes() -> ParsingResult<()> {
+        let input = "\\d\\w\\s".to_string();
+        let tokens = Regex::tokens(&input)?;
+        
+        assert_eq!(tokens.len(), 3);
+        
+        // Check digit class
+        if let RegexType::Class(class) = &tokens[0] {
+            assert!(class.matches('0'));
+            assert!(!class.matches('a'));
+        } else {
+            panic!("Expected a digit class");
+        }
+        
+        // Check word class
+        if let RegexType::Class(class) = &tokens[1] {
+            assert!(class.matches('a'));
+            assert!(class.matches('_'));
+        } else {
+            panic!("Expected a word class");
+        }
+        
+        // Check whitespace class
+        if let RegexType::Class(class) = &tokens[2] {
+            assert!(class.matches(' '));
+            assert!(class.matches('\t'));
+        } else {
+            panic!("Expected a whitespace class");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_complex_regex_pattern() -> ParsingResult<()> {
+        let input = "(a|b)+[0-9]?\\w{2,5}".to_string();
+        let tokens = Regex::tokens(&input)?;
+        
+        // Check for expected token types
+        assert!(matches!(tokens[0], RegexType::OpenParenthesis));
+        assert!(matches!(tokens[1], RegexType::Char('a')));
+        assert!(matches!(tokens[2], RegexType::Or));
+        assert!(matches!(tokens[3], RegexType::Char('b')));
+        assert!(matches!(tokens[4], RegexType::CloseParenthesis));
+        assert!(matches!(tokens[5], RegexType::Plus));
+        
+        // Check character class
+        if let RegexType::Class(class) = &tokens[6] {
+            assert!(class.matches('0'));
+            assert!(class.matches('9'));
+            assert!(!class.matches('a'));
+        } else {
+            panic!("Expected a digit character class");
+        }
+        
+        assert!(matches!(tokens[7], RegexType::QuestionMark));
+        
+        // Check word char class
+        if let RegexType::Class(class) = &tokens[8] {
+            assert!(class.matches('a'));
+            assert!(class.matches('_'));
+        } else {
+            panic!("Expected a word character class");
+        }
+        
+        // Check quantifier
+        if let RegexType::Quant(quant) = &tokens[9] {
+            if let Quantifier::Range(min, max) = quant {
+                assert_eq!(*min, 2);
+                assert_eq!(*max, 5);
+            } else {
+                panic!("Expected a range quantifier");
+            }
+        } else {
+            panic!("Expected a quantifier");
+        }
+        
+        Ok(())
     }
     
     // 3. CONCATENATION TESTS
@@ -580,14 +993,30 @@ mod tests {
     // =======================
     
     #[test]
-    fn test_shorthand_class_try_from() {
-        assert_eq!(ShorthandClass::try_from('d'), Ok(ShorthandClass::Digit));
-        assert_eq!(ShorthandClass::try_from('D'), Ok(ShorthandClass::NonDigit));
-        assert_eq!(ShorthandClass::try_from('w'), Ok(ShorthandClass::WordChar));
-        assert_eq!(ShorthandClass::try_from('W'), Ok(ShorthandClass::NonWordChar));
-        assert_eq!(ShorthandClass::try_from('s'), Ok(ShorthandClass::WhiteSpace));
-        assert_eq!(ShorthandClass::try_from('S'), Ok(ShorthandClass::NonWhiteSpace));
-        assert!(ShorthandClass::try_from('x').is_err());
+    fn test_character_class_from_shorthand() -> ParsingResult<()> {
+        assert!(CharacterClass::from_shorthand('d').is_ok());
+        assert!(CharacterClass::from_shorthand('D').is_ok());
+        assert!(CharacterClass::from_shorthand('w').is_ok());
+        assert!(CharacterClass::from_shorthand('W').is_ok());
+        assert!(CharacterClass::from_shorthand('s').is_ok());
+        assert!(CharacterClass::from_shorthand('S').is_ok());
+        assert!(CharacterClass::from_shorthand('x').is_err());
+        
+        let digit_class = CharacterClass::from_shorthand('d')?;
+        assert!(digit_class.matches('0'));
+        assert!(!digit_class.matches('a'));
+        
+        let word_class = CharacterClass::from_shorthand('w')?;
+        assert!(word_class.matches('a'));
+        assert!(word_class.matches('_'));
+        assert!(!word_class.matches(' '));
+        
+        let space_class = CharacterClass::from_shorthand('s')?;
+        assert!(space_class.matches(' '));
+        assert!(space_class.matches('\t'));
+        assert!(!space_class.matches('a'));
+        
+        Ok(())
     }
     
     // 6. TOKEN TYPE TESTS
@@ -619,5 +1048,418 @@ mod tests {
             TokenType::from(RegexType::CloseParenthesis),
             TokenType::Closing(RegexType::CloseParenthesis)
         ));
+    }
+    
+    // 7. CHARACTER CLASS TESTS
+    // ======================
+    
+    #[test]
+    fn test_character_class_basic() {
+        let mut class = CharacterClass::new();
+        class.add_char('a');
+        class.add_char('b');
+        class.add_char('c');
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('b'));
+        assert!(class.contains_char('c'));
+        assert!(!class.contains_char('d'));
+        
+        assert!(class.matches('a'));
+        assert!(!class.matches('d'));
+    }
+    
+    #[test]
+    fn test_character_class_range() {
+        let mut class = CharacterClass::new();
+        class.add_range('a', 'z');
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('m'));
+        assert!(class.contains_char('z'));
+        assert!(!class.contains_char('A'));
+    }
+    
+    #[test]
+    fn test_character_class_negated() {
+        let class = CharacterClass::new().negated();
+        
+        assert!(!class.contains_char('a')); // Empty class contains nothing
+        assert!(class.matches('a')); // But negated matches everything
+    }
+    
+    #[test]
+    fn test_character_class_complex() {
+        let mut class = CharacterClass::new();
+        class.add_char('a');
+        class.add_char('b');
+        class.add_range('x', 'z');
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('b'));
+        assert!(!class.contains_char('c'));
+        assert!(class.contains_char('x'));
+        assert!(class.contains_char('y'));
+        assert!(class.contains_char('z'));
+        assert!(!class.contains_char('w'));
+    }
+    
+    #[test]
+    fn test_character_class_parse() -> ParsingResult<()> {
+        let input = "abc]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('b'));
+        assert!(class.contains_char('c'));
+        assert!(!class.contains_char('d'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_parse_range() -> ParsingResult<()> {
+        let input = "a-z]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('m'));
+        assert!(class.contains_char('z'));
+        assert!(!class.contains_char('A'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_parse_complex() -> ParsingResult<()> {
+        let input = "a-cx-z]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('b'));
+        assert!(class.contains_char('c'));
+        assert!(!class.contains_char('d'));
+        assert!(class.contains_char('x'));
+        assert!(class.contains_char('y'));
+        assert!(class.contains_char('z'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_parse_negated() -> ParsingResult<()> {
+        let input = "^a-c]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(!class.matches('a'));
+        assert!(!class.matches('b'));
+        assert!(!class.matches('c'));
+        assert!(class.matches('d'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_merge() {
+        let mut class1 = CharacterClass::new();
+        class1.add_char('a');
+        class1.add_range('0', '9');
+        
+        let mut class2 = CharacterClass::new();
+        class2.add_char('b');
+        class2.add_range('x', 'z');
+        
+        class1.merge(&class2);
+        
+        // Check that class1 now contains all characters from both classes
+        assert!(class1.contains_char('a'));
+        assert!(class1.contains_char('b'));
+        assert!(class1.contains_char('0'));
+        assert!(class1.contains_char('5'));
+        assert!(class1.contains_char('9'));
+        assert!(class1.contains_char('x'));
+        assert!(class1.contains_char('y'));
+        assert!(class1.contains_char('z'));
+    }
+    
+    #[test]
+    fn test_character_class_merge_with_negated() {
+        let mut class1 = CharacterClass::new();
+        class1.add_char('a');
+        
+        let class2 = CharacterClass::new().negated();
+        
+        // Merging with a negated class should not change class1
+        class1.merge(&class2);
+        
+        assert!(class1.contains_char('a'));
+        assert!(!class1.contains_char('b'));
+    }
+    
+    #[test]
+    fn test_character_class_parse_edge_cases() -> ParsingResult<()> {
+        // Test dash at beginning
+        let input = "-abc]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('-'));
+        assert!(class.contains_char('a'));
+        
+        // Test dash at end
+        let input = "abc-]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('-'));
+        assert!(class.contains_char('a'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_parse_with_escapes() -> ParsingResult<()> {
+        let input = "a\\n\\t]";
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        assert!(class.contains_char('a'));
+        assert!(class.contains_char('\n'));
+        assert!(class.contains_char('\t'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_predefined_methods() {
+        // Test digit class
+        let digit = CharacterClass::digit();
+        assert!(digit.matches('0'));
+        assert!(digit.matches('9'));
+        assert!(!digit.matches('a'));
+        
+        // Test non-digit class
+        let non_digit = CharacterClass::non_digit();
+        assert!(!non_digit.matches('0'));
+        assert!(non_digit.matches('a'));
+        
+        // Test word char class
+        let word = CharacterClass::word_char();
+        assert!(word.matches('a'));
+        assert!(word.matches('Z'));
+        assert!(word.matches('0'));
+        assert!(word.matches('_'));
+        assert!(!word.matches(' '));
+        assert!(!word.matches('-'));
+        
+        // Test non-word char class
+        let non_word = CharacterClass::non_word_char();
+        assert!(!non_word.matches('a'));
+        assert!(non_word.matches(' '));
+        assert!(non_word.matches('-'));
+        
+        // Test whitespace class
+        let space = CharacterClass::whitespace();
+        assert!(space.matches(' '));
+        assert!(space.matches('\t'));
+        assert!(space.matches('\n'));
+        assert!(space.matches('\r'));
+        assert!(!space.matches('a'));
+        
+        // Test non-whitespace class
+        let non_space = CharacterClass::non_whitespace();
+        assert!(!non_space.matches(' '));
+        assert!(non_space.matches('a'));
+    }
+    
+    #[test]
+    fn test_character_class_convenience_constructors() {
+        // Test single character constructor
+        let single = CharacterClass::single('x');
+        assert!(single.contains_char('x'));
+        assert!(!single.contains_char('y'));
+        
+        // Test range constructor
+        let range = CharacterClass::range('a', 'c');
+        assert!(range.contains_char('a'));
+        assert!(range.contains_char('b'));
+        assert!(range.contains_char('c'));
+        assert!(!range.contains_char('d'));
+        
+        // Test negated helper
+        let negated = CharacterClass::from_negated(CharacterClass::single('x'));
+        assert!(!negated.matches('x'));
+        assert!(negated.matches('y'));
+    }
+    
+    #[test]
+    fn test_character_class_unclosed() {
+        let input = "[abc".to_string();
+        let mut chars = input.chars();
+        let result = CharacterClass::parse(&mut chars);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_character_class_empty() -> ParsingResult<()> {
+        let input = "]".to_string();
+        let mut chars = input.chars();
+        let class = CharacterClass::parse(&mut chars)?;
+        
+        // Empty class should match nothing
+        assert!(!class.contains_char('a'));
+        assert!(!class.contains_char('b'));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_character_class_add_invalid_range() {
+        let mut class = CharacterClass::new();
+        
+        // Adding a range where start > end should be ignored
+        class.add_range('z', 'a');
+        
+        assert!(!class.contains_char('a'));
+        assert!(!class.contains_char('z'));
+    }
+    
+    #[test]
+    fn test_character_class_from_shorthand_invalid() {
+        let result = CharacterClass::from_shorthand('x');
+        assert!(result.is_err());
+        
+        if let Err(err) = result {
+            assert!(err.to_string().contains("Unknown shorthand class"));
+        }
+    }
+    
+    // 8. QUANTIFIER TESTS
+    // =================
+    
+    #[test]
+    fn test_quantifier_exact() -> ParsingResult<()> {
+        let input = "5}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        Regex::add_quantifier(tokens, &mut chars)?;
+        
+        assert_eq!(tokens.len(), 1);
+        if let RegexType::Quant(Quantifier::Exact(n)) = &tokens[0] {
+            assert_eq!(*n, 5);
+        } else {
+            panic!("Expected Quantifier::Exact");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_quantifier_at_least() -> ParsingResult<()> {
+        let input = "3,}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        Regex::add_quantifier(tokens, &mut chars)?;
+        
+        assert_eq!(tokens.len(), 1);
+        if let RegexType::Quant(Quantifier::AtLeast(n)) = &tokens[0] {
+            assert_eq!(*n, 3);
+        } else {
+            panic!("Expected Quantifier::AtLeast");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_quantifier_range() -> ParsingResult<()> {
+        let input = "2,5}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        Regex::add_quantifier(tokens, &mut chars)?;
+        
+        assert_eq!(tokens.len(), 1);
+        if let RegexType::Quant(Quantifier::Range(min, max)) = &tokens[0] {
+            assert_eq!(*min, 2);
+            assert_eq!(*max, 5);
+        } else {
+            panic!("Expected Quantifier::Range");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_quantifier_zero() -> ParsingResult<()> {
+        let input = "0}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        Regex::add_quantifier(tokens, &mut chars)?;
+        
+        if let RegexType::Quant(Quantifier::Exact(n)) = &tokens[0] {
+            assert_eq!(*n, 0);
+        } else {
+            panic!("Expected Quantifier::Exact(0)");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_quantifier_empty_range() -> ParsingResult<()> {
+        let input = "0,0}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        Regex::add_quantifier(tokens, &mut chars)?;
+        
+        if let RegexType::Quant(Quantifier::Range(min, max)) = &tokens[0] {
+            assert_eq!(*min, 0);
+            assert_eq!(*max, 0);
+        } else {
+            panic!("Expected Quantifier::Range(0, 0)");
+        }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_quantifier_display() {
+        let exact = Quantifier::Exact(5);
+        assert_eq!(exact.to_string(), "{5}");
+        
+        let at_least = Quantifier::AtLeast(2);
+        assert_eq!(at_least.to_string(), "{2,}");
+        
+        let range = Quantifier::Range(1, 3);
+        assert_eq!(range.to_string(), "{1,3}");
+    }
+    
+    #[test]
+    fn test_quantifier_invalid_range() {
+        let input = "5,2}";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        let result = Regex::add_quantifier(tokens, &mut chars);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_quantifier_unclosed() {
+        let input = "5";
+        let mut chars = input.chars();
+        let tokens = &mut VecDeque::new();
+        
+        let result = Regex::add_quantifier(tokens, &mut chars);
+        assert!(result.is_err());
     }
 }
