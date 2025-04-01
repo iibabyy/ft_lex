@@ -270,8 +270,16 @@ fn test_regex_new_simple() -> ParsingResult<()> {
     let expr = "ab+c*".to_string();
     let result = Regex::new(expr)?;
     
-    // Should be: a·b+·c*
+    // Should produce postfix: a b+ · c* ·
     assert_eq!(result.len(), 7);
+    assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
+    assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
+    assert!(matches!(result[2], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1)))));
+    assert!(matches!(result[3], TokenType::BinaryOperator(RegexType::Concatenation)));
+    assert!(matches!(result[4], TokenType::Literal(RegexType::Char('c'))));
+    assert!(matches!(result[5], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(0)))));
+    assert!(matches!(result[6], TokenType::BinaryOperator(RegexType::Concatenation)));
+    
     Ok(())
 }
 
@@ -280,8 +288,14 @@ fn test_regex_new_with_alternation() -> ParsingResult<()> {
     let expr = "a|b|c".to_string();
     let result = Regex::new(expr)?;
     
-    // Should be: a|b|c
+    // Should produce postfix: a b | c |
     assert_eq!(result.len(), 5);
+    assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
+    assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
+    assert!(matches!(result[2], TokenType::BinaryOperator(RegexType::Or)));
+    assert!(matches!(result[3], TokenType::Literal(RegexType::Char('c'))));
+    assert!(matches!(result[4], TokenType::BinaryOperator(RegexType::Or)));
+    
     Ok(())
 }
 
@@ -290,8 +304,80 @@ fn test_regex_new_with_groups() -> ParsingResult<()> {
     let expr = "(a)(b)".to_string();
     let result = Regex::new(expr)?;
     
-    // Should be: (a)·(b)
-    assert_eq!(result.len(), 7);
+    // Should produce postfix: a b ·
+    assert_eq!(result.len(), 3);
+    assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
+    assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
+    assert!(matches!(result[2], TokenType::BinaryOperator(RegexType::Concatenation)));
+    
+    Ok(())
+}
+
+#[test]
+fn test_regex_new_with_complex_pattern() -> ParsingResult<()> {
+    let expr = "(a|b)+c?".to_string();
+    let result = Regex::new(expr)?;
+    
+    // Should produce postfix: a b | + c ? ·
+    assert_eq!(result.len(), 6);
+    assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
+    assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
+    assert!(matches!(result[2], TokenType::BinaryOperator(RegexType::Or)));
+    assert!(matches!(result[3], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1)))));
+    assert!(matches!(result[4], TokenType::Literal(RegexType::Char('c'))));
+    assert!(matches!(result[5], TokenType::UnaryOperator(RegexType::QuestionMark)));
+    
+    Ok(())
+}
+
+#[test]
+fn test_regex_new_with_nested_groups() -> ParsingResult<()> {
+    let expr = "a(b(c|d)e)f".to_string();
+    let result = Regex::new(expr)?;
+    
+    // Should produce postfix: a b c d | · e · · f ·
+    assert_eq!(result.len(), 9);
+    assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
+    assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
+    assert!(matches!(result[2], TokenType::Literal(RegexType::Char('c'))));
+    assert!(matches!(result[3], TokenType::Literal(RegexType::Char('d'))));
+    assert!(matches!(result[4], TokenType::BinaryOperator(RegexType::Or)));
+    assert!(matches!(result[5], TokenType::BinaryOperator(RegexType::Concatenation)));
+    assert!(matches!(result[6], TokenType::Literal(RegexType::Char('e'))));
+    assert!(matches!(result[7], TokenType::BinaryOperator(RegexType::Concatenation)));
+    assert!(matches!(result[8], TokenType::Literal(RegexType::Char('f'))));
+    
+    Ok(())
+}
+
+#[test]
+fn test_regex_new_with_character_classes() -> ParsingResult<()> {
+    let expr = "[a-z]+\\d*".to_string();
+    let result = Regex::new(expr)?;
+    
+    // Should produce postfix where first token is a character class and third is a digit class
+    assert!(result.len() >= 5);
+    
+    if let TokenType::Literal(RegexType::Class(class1)) = &result[0] {
+        assert!(class1.matches('a'));
+        assert!(class1.matches('z'));
+        assert!(!class1.matches('0'));
+    } else {
+        panic!("Expected a character class at position 0");
+    }
+    
+    assert!(matches!(result[1], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1)))));
+    
+    if let TokenType::Literal(RegexType::Class(class2)) = &result[2] {
+        assert!(class2.matches('0'));
+        assert!(class2.matches('9'));
+        assert!(!class2.matches('a'));
+    } else {
+        panic!("Expected a digit class at position 2");
+    }
+    
+    assert!(matches!(result[3], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(0)))));
+    
     Ok(())
 }
 

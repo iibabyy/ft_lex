@@ -273,7 +273,7 @@ impl TokenType {
 // ==============================
 
 impl Regex {
-    pub fn new(expr: String) -> ParsingResult<VecDeque<TokenType>> {
+    pub fn new(expr: String) -> ParsingResult<Vec<TokenType>> {
         let tokens = Self::tokens(&expr)?;
 
         let tokens_with_concatenation = Self::add_concatenation(tokens);
@@ -283,7 +283,9 @@ impl Regex {
         }
         eprintln!();
 
-        Ok(tokens_with_concatenation)
+        let postfix = re2post(tokens_with_concatenation)?;
+
+        Ok(postfix)
     }
 
     pub fn tokens_to_posix(_tokens: VecDeque<RegexType>) {
