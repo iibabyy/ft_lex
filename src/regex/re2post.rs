@@ -22,12 +22,16 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<VecDeque<TokenT
 
                         Some(_) => output_stack.push(operator_stack.pop().unwrap()),
 
-                        None => return Err(ParsingError::unrecognized_rule().because(""))
+                        None => return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis"))
                     }
                 }
+
+                operator_stack.pop();
             },
 
-            _ => todo!()
+            TokenType::Li => {
+
+            }
         }
     }
 
