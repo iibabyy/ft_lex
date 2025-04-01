@@ -39,19 +39,19 @@ impl TryFrom<&str> for StateType {
 #[derive(Debug)]
 pub struct Definitions {
     /// Map of name to substitution text
-    substitutes: HashMap<String, String>,
+    pub substitutes: HashMap<String, String>,
 
     /// List of program fragments
-    fragments: Vec<String>,
+    pub fragments: Vec<String>,
 
     /// Declaration of yytext type (array or pointer)
-    type_declaration: Option<TypeDeclaration>,
+    pub type_declaration: Option<TypeDeclaration>,
 
     /// Map of table size declarations to their values
-    table_sizes: HashMap<TableSizeDeclaration, usize>,
+    pub table_sizes: HashMap<TableSizeDeclaration, usize>,
 
     /// Map of state names to their types
-    states: HashMap<String, StateType>,
+    pub states: HashMap<String, StateType>,
 }
 
 /// Represents different types of definitions that can appear in the definitions section.
@@ -72,9 +72,93 @@ pub enum DefinitionType {
     EndOfSection,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TableSizeDeclaration {
+    Positions,
+    Transitions,
+    Statesets,
+    Equivalence,
+    Characters,
+    Outputfiles,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeDeclaration {
+    Array,
+    Pointer,
+}
+
+impl TryFrom<String> for TableSizeDeclaration {
+    type Error = ();
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&str> for TableSizeDeclaration {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "p" => Ok(Self::Positions),
+            "n" => Ok(Self::Transitions),
+            "e" => Ok(Self::Equivalence),
+            "a" => Ok(Self::Statesets),
+            "k" => Ok(Self::Characters),
+            "o" => Ok(Self::Outputfiles),
+            _ => Err(()),
+        }
+    }
+}
+
+impl ToString for TableSizeDeclaration {
+    fn to_string(&self) -> String {
+        match self {
+            TableSizeDeclaration::Positions => "%p",
+            TableSizeDeclaration::Transitions => "%n",
+            TableSizeDeclaration::Equivalence => "%e",
+            TableSizeDeclaration::Statesets => "%a",
+            TableSizeDeclaration::Characters => "%k",
+            TableSizeDeclaration::Outputfiles => "%o",
+        }
+        .to_string()
+    }
+}
+
+impl TryFrom<String> for TypeDeclaration {
+    type Error = ();
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&str> for TypeDeclaration {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "array" => Ok(Self::Array),
+            "pointer" => Ok(Self::Pointer),
+            _ => Err(()),
+        }
+    }
+}
+
+impl ToString for TypeDeclaration {
+    fn to_string(&self) -> String {
+        match self {
+            TypeDeclaration::Array => "array",
+            TypeDeclaration::Pointer => "pointer",
+        }
+        .to_string()
+    }
+}
+
 impl Definitions {
     /// Creates a new empty definitions collection.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             substitutes: HashMap::new(),
             fragments: Vec::new(),
@@ -94,7 +178,7 @@ impl Definitions {
     /// - State declarations (%s, %x)
     /// 
     /// Returns an error if any definition is invalid or if the section delimiter is missing.
-    pub(super) fn parse<'de, R: Read>(&'de mut self, reader: &mut Reader<R>) -> ParsingResult<&'de mut Self> {
+    pub fn parse<'de, R: Read>(&'de mut self, reader: &mut Reader<R>) -> ParsingResult<&'de mut Self> {
         loop {
             match Self::line_type(reader)? {
                 DefinitionType::TableSize(table, size) => {
@@ -166,7 +250,7 @@ impl Definitions {
 
         // Line Program Fragment: lines that start with a space
         // This is C code that will be included directly in the output
-        if first_char == ' ' {
+        if first_char == ' ' || first_char == '\t' {
             return Ok(DefinitionType::Fragment(line[1..].to_string()));
         }
 
@@ -309,7 +393,7 @@ impl Definitions {
     /// Returns an error if:
     /// - The line has fewer parts than expected
     /// - The line has more parts than expected
-    pub(super) fn check_split_size(
+    pub fn check_split_size(
         split: &Vec<String>,
         expected: usize,
         expected_err_msg: impl ToString,
@@ -331,7 +415,7 @@ impl Definitions {
     }
 
     /// Checks if a character is a valid description section flag.
-    fn is_valid_description_flag(c: char) -> bool {
+    pub fn is_valid_description_flag(c: char) -> bool {
         // Program Fragment
         if c == '{' {
             return true;

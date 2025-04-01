@@ -1,6 +1,6 @@
 /// A module for parsing lexer definitions and configurations.
 pub mod utils;
-mod definitions;
+pub mod definitions;
 pub mod error;
 pub mod reader;
 mod rules;

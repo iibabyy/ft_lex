@@ -33,8 +33,6 @@ HEX        \\x[0-9A-Fa-f]{1,2}
   {DIGIT}a        { BEGIN(INITIAL); }
 }
 
-" AHAH""   printf("ahah");
-
 <STRING>{
   \"          { BEGIN(INITIAL); }
   {HEX}       { printf("HEX ESCAPE: %s\n", yytext); }

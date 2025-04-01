@@ -1,53 +1,56 @@
 use std::{
-    io::{stdin, Bytes, Lines},
-    iter::Enumerate,
-    str::Chars,
+    collections::VecDeque, io::{stdin, Bytes, Lines}, iter::{Enumerate, Peekable}, str::Chars
 };
 
 use super::*;
 
 #[derive(Debug)]
 pub struct Reader<R: Read> {
-    chars: Bytes<BufReader<R>>,
+    chars: Peekable<Bytes<BufReader<R>>>,
 
     filename: String,
 
     line_index: usize,
 
     end_of_line: bool,
+    
+    rest: VecDeque<char>,
 }
 
 impl<R: Read> Reader<R> {
     pub fn new(file: R, path: impl ToString) -> io::Result<Self> {
         let reader = BufReader::new(file);
 
-        let chars = reader.bytes();
+        let chars = reader.bytes().peekable();
 
         Ok(Self {
             chars,
             filename: path.to_string(),
             line_index: 0,
             end_of_line: false,
+            rest: VecDeque::new(),
         })
     }
 
-    pub fn next(&mut self) -> io::Result<Option<u8>> {
+    pub fn next(&mut self) -> io::Result<Option<u8>> {	
         if self.end_of_line == true {
             self.line_index += 1;
             self.end_of_line = false;
         }
 
-        if let Some(char) = self.chars.next() {
-            let char = char?;
-
-            if char == '\n' as u8 {
-                self.end_of_line = true;
-            }
-
-            Ok(Some(char))
+        let c = if let Some(c) = self.rest.pop_front() {
+            c
+        } else if let Some(c) = self.chars.next() {
+			c? as char
         } else {
-            Ok(None)
+            return Ok(None);
+        };
+
+        if c == '\n' {
+            self.end_of_line = true;
         }
+
+        Ok(Some(c as u8))
     }
 
     pub fn line(&mut self) -> io::Result<Option<String>> {
@@ -83,6 +86,19 @@ impl<R: Read> Reader<R> {
     pub fn filename(&self) -> &str {
         &self.filename
     }
+
+    pub fn push_str(&mut self, s: &str) {
+		self.rest.extend(s.chars());
+    }
+
+    pub fn push_char(&mut self, c: char) {
+        self.rest.push_back(c);
+    }
+	
+	pub fn peek(&mut self) -> Option<&Result<u8, io::Error>> {
+		self.chars.peek()
+	}
+	
 }
 
 pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {

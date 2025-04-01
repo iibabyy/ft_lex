@@ -2,6 +2,8 @@
 
 use std::fmt::{Debug, Formatter};
 
+mod tests;
+
 mod parsing;
 use parsing::*;
 
