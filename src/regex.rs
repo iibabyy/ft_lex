@@ -20,13 +20,11 @@ pub enum RegexType {
     QuestionMark,
     Hat,
     Dollar,
-    Star,
     Comma,
     OpenParenthesis,
     CloseParenthesis,
     Dot,
     Minus,
-    Plus,
     Or,
     Concatenation,
     Class(CharacterClass),
@@ -36,8 +34,8 @@ pub enum RegexType {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenType {
     Literal(RegexType),
-    Opening(RegexType),
-    Closing(RegexType),
+    OpenParenthesis(RegexType),
+    CloseParenthesis(RegexType),
     UnaryOperator(RegexType),
     BinaryOperator(RegexType),
     StartOrEndCondition(RegexType),
@@ -79,8 +77,8 @@ impl TokenType {
     pub fn into_inner(&self) -> &RegexType {
         match self {
             TokenType::Literal(rt) => rt,
-            TokenType::Opening(rt) => rt,
-            TokenType::Closing(rt) => rt,
+            TokenType::OpenParenthesis(rt) => rt,
+            TokenType::CloseParenthesis(rt) => rt,
             TokenType::UnaryOperator(rt) => rt,
             TokenType::BinaryOperator(rt) => rt,
             TokenType::StartOrEndCondition(rt) => rt,
@@ -100,13 +98,11 @@ impl fmt::Display for RegexType {
             RegexType::QuestionMark => write!(f, "?"),
             RegexType::Hat => write!(f, "^"),
             RegexType::Dollar => write!(f, "$"),
-            RegexType::Star => write!(f, "*"),
             RegexType::Comma => write!(f, ","),
             RegexType::OpenParenthesis => write!(f, "("),
             RegexType::CloseParenthesis => write!(f, ")"),
             RegexType::Dot => write!(f, "."),
             RegexType::Minus => write!(f, "-"),
-            RegexType::Plus => write!(f, "+"),
             RegexType::Or => write!(f, "|"),
             RegexType::Concatenation => write!(f, "&"),
             RegexType::Class(c) => write!(f, "{}", c),
@@ -119,8 +115,8 @@ impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Literal(rt) => write!(f, "{}", rt),
-            Self::Opening(rt) => write!(f, "{}", rt),
-            Self::Closing(rt) => write!(f, "{}", rt),
+            Self::OpenParenthesis(rt) => write!(f, "{}", rt),
+            Self::CloseParenthesis(rt) => write!(f, "{}", rt),
             Self::UnaryOperator(rt) => write!(f, "{}", rt),
             Self::BinaryOperator(rt) => write!(f, "{}", rt),
             Self::StartOrEndCondition(rt) => write!(f, "{}", rt),
@@ -167,14 +163,13 @@ impl From<RegexType> for TokenType {
     fn from(value: RegexType) -> Self {
         match value {
             // Opening group
-            RegexType::OpenParenthesis => TokenType::Opening(value),
+            RegexType::OpenParenthesis => TokenType::OpenParenthesis(value),
 
             // Closing group
-            RegexType::CloseParenthesis => TokenType::Closing(value),
+            RegexType::CloseParenthesis => TokenType::CloseParenthesis(value),
 
             // One element operator
-            RegexType::Star
-                | RegexType::Plus
+            RegexType::Quant(_)
                 | RegexType::QuestionMark => TokenType::UnaryOperator(value),
             
             // Two element operator
@@ -197,7 +192,7 @@ impl From<RegexType> for TokenType {
 impl RegexType {
     pub fn precedence(&self) -> usize {
         match self {
-            RegexType::Star | RegexType::Plus | RegexType::QuestionMark => 3,
+            RegexType::Quant(_) | RegexType::QuestionMark => 3,
 
             RegexType::Concatenation => 2,
 
@@ -210,14 +205,13 @@ impl RegexType {
     pub fn type_(&self) -> TokenType {
         match self {
             // Opening group
-            RegexType::OpenParenthesis => TokenType::Opening(self.clone()),
+            RegexType::OpenParenthesis => TokenType::OpenParenthesis(self.clone()),
 
             // Closing group
-            RegexType::CloseParenthesis => TokenType::Closing(self.clone()),
+            RegexType::CloseParenthesis => TokenType::CloseParenthesis(self.clone()),
 
             // One element operator
-            RegexType::Star
-                | RegexType::Plus
+            RegexType::Quant(_)
                 | RegexType::QuestionMark => TokenType::UnaryOperator(self.clone()),
             
             // Two element operator
@@ -242,19 +236,19 @@ impl TokenType {
         match (self, other.type_()) {
             // Literal followed by literal or opening parenthesis
             (TokenType::Literal(_),
-                TokenType::Literal(_) | TokenType::Opening(_) | TokenType::StartOrEndCondition(_)) => true,
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
 
             // Closing parenthesis followed by literal/opening parenthesis
-            (TokenType::Closing(_),
-                TokenType::Literal(_) | TokenType::Opening(_) | TokenType::StartOrEndCondition(_)) => true,
+            (TokenType::CloseParenthesis(_),
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
 
             // Unary operator followed by literal/opening parenthesis
             (TokenType::UnaryOperator(_),
-                TokenType::Literal(_) | TokenType::Opening(_) | TokenType::StartOrEndCondition(_)) => true,
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
 
             // Start/end condition followed by literal/opening parenthesis
             (TokenType::StartOrEndCondition(_),
-                TokenType::Literal(_) | TokenType::Opening(_)) => true,
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
 
             _ => false
         }
@@ -263,8 +257,8 @@ impl TokenType {
     pub fn precedence(&self) -> usize {
         match self {
             Self::Literal(rt) => rt.precedence(),
-            Self::Opening(rt) => rt.precedence(),
-            Self::Closing(rt) => rt.precedence(),
+            Self::OpenParenthesis(rt) => rt.precedence(),
+            Self::CloseParenthesis(rt) => rt.precedence(),
             Self::UnaryOperator(rt) => rt.precedence(),
             Self::BinaryOperator(rt) => rt.precedence(),
             Self::StartOrEndCondition(rt) => rt.precedence()
@@ -431,11 +425,11 @@ impl Regex {
 
     pub fn into_type(c: char, chars: &mut Chars<'_>) -> RegexType {
         match c {
-            '*' => RegexType::Star,
+            '*' => RegexType::Quant(Quantifier::AtLeast(0)),
 
             '.' => RegexType::Dot,
 
-            '+' => RegexType::Plus,
+            '+' => RegexType::Quant(Quantifier::AtLeast(1)),
 
             '-' => RegexType::Minus,
 

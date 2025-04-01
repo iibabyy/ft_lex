@@ -27,6 +27,8 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 %%
 
 
+(abc  { BEGIN(INITIAL); }
+
 <COMMENT>"/asd"         { BEGIN(COMMENT); }
 
 <COMMENT>{
