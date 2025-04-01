@@ -1,8 +1,11 @@
 mod re2post;
+pub use re2post::*;
+
 mod nfa;
+pub use nfa::*;
+
 
 use std::{collections::VecDeque, fmt, ops, str::Chars};
-use crate::parsing::{error::{ParsingError, ParsingResult}, utils::Utils};
 
 use super::*;
 

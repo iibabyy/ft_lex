@@ -1,3 +1,5 @@
+use super::*;
+
 #[cfg(test)]
 mod regex;
 

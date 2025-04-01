@@ -6,11 +6,11 @@ pub mod reader;
 mod rules;
 
 use super::*;
-use definitions::*;
-use error::*;
-use utils::*;
-use reader::*;
-use rules::*;
+pub use definitions::*;
+pub use error::*;
+pub use utils::*;
+pub use reader::*;
+pub use rules::*;
 
 use std::{
     fs::File, io::{self, BufRead, BufReader, Read, Stdin}, mem::take, os::unix::fs::FileExt, path::PathBuf

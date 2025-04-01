@@ -18,8 +18,6 @@ fn test_into_type_special_chars() {
     let mut chars = "".chars();
     assert!(matches!(Regex::into_type('(', &mut chars), RegexType::OpenParenthesis));
     assert!(matches!(Regex::into_type(')', &mut chars), RegexType::CloseParenthesis));
-    assert!(matches!(Regex::into_type('*', &mut chars), RegexType::Star));
-    assert!(matches!(Regex::into_type('+', &mut chars), RegexType::Plus));
     assert!(matches!(Regex::into_type('?', &mut chars), RegexType::QuestionMark));
     assert!(matches!(Regex::into_type('|', &mut chars), RegexType::Or));
     assert!(matches!(Regex::into_type('.', &mut chars), RegexType::Dot));
@@ -62,9 +60,7 @@ fn test_tokens_simple_regex() -> ParsingResult<()> {
     
     assert_eq!(tokens.len(), 4);
     assert!(matches!(tokens[0], RegexType::Char('a')));
-    assert!(matches!(tokens[1], RegexType::Plus));
     assert!(matches!(tokens[2], RegexType::Char('b')));
-    assert!(matches!(tokens[3], RegexType::Star));
     
     Ok(())
 }
@@ -178,7 +174,6 @@ fn test_complex_regex_pattern() -> ParsingResult<()> {
     assert!(matches!(tokens[2], RegexType::Or));
     assert!(matches!(tokens[3], RegexType::Char('b')));
     assert!(matches!(tokens[4], RegexType::CloseParenthesis));
-    assert!(matches!(tokens[5], RegexType::Plus));
     
     // Check character class
     if let RegexType::Class(class) = &tokens[6] {
@@ -258,11 +253,11 @@ fn test_add_concatenation_complex() {
     tokens.push_back(RegexType::Char('b'));
     
     let result = Regex::add_concatenation(tokens);
-    
+
     assert_eq!(result.len(), 5);
-    assert!(matches!(result[0], TokenType::Opening(RegexType::OpenParenthesis)));
+    assert!(matches!(result[0], TokenType::OpenParenthesis(RegexType::OpenParenthesis)));
     assert!(matches!(result[1], TokenType::Literal(RegexType::Char('a'))));
-    assert!(matches!(result[2], TokenType::Closing(RegexType::CloseParenthesis)));
+    assert!(matches!(result[2], TokenType::CloseParenthesis(RegexType::CloseParenthesis)));
     assert!(matches!(result[3], TokenType::BinaryOperator(RegexType::Concatenation)));
     assert!(matches!(result[4], TokenType::Literal(RegexType::Char('b'))));
 }
@@ -341,23 +336,18 @@ fn test_token_type_from_regex_type() {
     ));
     
     assert!(matches!(
-        TokenType::from(RegexType::Star),
-        TokenType::UnaryOperator(RegexType::Star)
-    ));
-    
-    assert!(matches!(
         TokenType::from(RegexType::Or),
         TokenType::BinaryOperator(RegexType::Or)
     ));
     
     assert!(matches!(
         TokenType::from(RegexType::OpenParenthesis),
-        TokenType::Opening(RegexType::OpenParenthesis)
+        TokenType::OpenParenthesis(RegexType::OpenParenthesis)
     ));
     
     assert!(matches!(
         TokenType::from(RegexType::CloseParenthesis),
-        TokenType::Closing(RegexType::CloseParenthesis)
+        TokenType::CloseParenthesis(RegexType::CloseParenthesis)
     ));
 }
 
