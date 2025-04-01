@@ -55,6 +55,10 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
     }
 
     while let Some(token) = operator_stack.pop() {
+        if matches!(token, TokenType::OpenParenthesis(_)) {
+            return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis"))
+        }
+
         output_stack.push(token);
     }
 

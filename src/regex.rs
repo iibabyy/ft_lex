@@ -87,6 +87,18 @@ impl TokenType {
             TokenType::StartOrEndCondition(rt) => rt,
         }
     }
+
+    /// Converts a TokenType back to its inner RegexType
+    pub fn into_owned_inner(self) -> RegexType {
+        match self {
+            TokenType::Literal(rt) => rt,
+            TokenType::OpenParenthesis(rt) => rt,
+            TokenType::CloseParenthesis(rt) => rt,
+            TokenType::UnaryOperator(rt) => rt,
+            TokenType::BinaryOperator(rt) => rt,
+            TokenType::StartOrEndCondition(rt) => rt,
+        }
+    }
 }
 
 
@@ -278,12 +290,11 @@ impl Regex {
 
         let tokens_with_concatenation = Self::add_concatenation(tokens);
 
-        for token in &tokens_with_concatenation {
-            eprint!("{} ", token.to_string())
-        }
-        eprintln!();
-
         let postfix = re2post(tokens_with_concatenation)?;
+
+        postfix.iter().for_each(|token| eprint!("{} ", token.to_string()));
+
+        eprintln!();
 
         Ok(postfix)
     }

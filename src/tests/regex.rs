@@ -318,14 +318,17 @@ fn test_regex_new_with_complex_pattern() -> ParsingResult<()> {
     let expr = "(a|b)+c?".to_string();
     let result = Regex::new(expr)?;
     
+    dbg!(&result);
+
     // Should produce postfix: a b | + c ? ·
-    assert_eq!(result.len(), 6);
+    assert_eq!(result.len(), 7);
     assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
     assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
     assert!(matches!(result[2], TokenType::BinaryOperator(RegexType::Or)));
     assert!(matches!(result[3], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1)))));
     assert!(matches!(result[4], TokenType::Literal(RegexType::Char('c'))));
     assert!(matches!(result[5], TokenType::UnaryOperator(RegexType::QuestionMark)));
+    assert!(matches!(result[6], TokenType::BinaryOperator(RegexType::Concatenation)));
     
     Ok(())
 }
@@ -335,8 +338,10 @@ fn test_regex_new_with_nested_groups() -> ParsingResult<()> {
     let expr = "a(b(c|d)e)f".to_string();
     let result = Regex::new(expr)?;
     
+    dbg!(&result);  
+
     // Should produce postfix: a b c d | · e · · f ·
-    assert_eq!(result.len(), 9);
+    assert_eq!(result.len(), 11);
     assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
     assert!(matches!(result[1], TokenType::Literal(RegexType::Char('b'))));
     assert!(matches!(result[2], TokenType::Literal(RegexType::Char('c'))));
@@ -345,7 +350,9 @@ fn test_regex_new_with_nested_groups() -> ParsingResult<()> {
     assert!(matches!(result[5], TokenType::BinaryOperator(RegexType::Concatenation)));
     assert!(matches!(result[6], TokenType::Literal(RegexType::Char('e'))));
     assert!(matches!(result[7], TokenType::BinaryOperator(RegexType::Concatenation)));
-    assert!(matches!(result[8], TokenType::Literal(RegexType::Char('f'))));
+    assert!(matches!(result[8], TokenType::BinaryOperator(RegexType::Concatenation)));
+    assert!(matches!(result[9], TokenType::Literal(RegexType::Char('f'))));
+    assert!(matches!(result[10], TokenType::BinaryOperator(RegexType::Concatenation)));
     
     Ok(())
 }
