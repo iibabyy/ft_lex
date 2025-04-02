@@ -1,8 +1,8 @@
 mod re2post;
 pub use re2post::*;
 
-mod nfa;
-pub use nfa::*;
+mod post2nfa;
+pub use post2nfa::*;
 
 
 use std::{collections::VecDeque, fmt, ops, str::Chars};
@@ -21,13 +21,11 @@ pub struct Regex {
 pub enum RegexType {
     Char(char),
     QuestionMark,
-    Hat,
-    Dollar,
-    Comma,
+    LineStart,
+    LineEnd,
     OpenParenthesis,
     CloseParenthesis,
     Dot,
-    Minus,
     Or,
     Concatenation,
     Class(CharacterClass),
@@ -111,13 +109,11 @@ impl fmt::Display for RegexType {
         match self {
             RegexType::Char(c) => write!(f, "{}", c),
             RegexType::QuestionMark => write!(f, "?"),
-            RegexType::Hat => write!(f, "^"),
-            RegexType::Dollar => write!(f, "$"),
-            RegexType::Comma => write!(f, ","),
+            RegexType::LineStart => write!(f, "^"),
+            RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),
             RegexType::CloseParenthesis => write!(f, ")"),
             RegexType::Dot => write!(f, "."),
-            RegexType::Minus => write!(f, "-"),
             RegexType::Or => write!(f, "|"),
             RegexType::Concatenation => write!(f, "&"),
             RegexType::Class(c) => write!(f, "{}", c),
@@ -192,8 +188,8 @@ impl From<RegexType> for TokenType {
                 | RegexType::Concatenation => TokenType::BinaryOperator(value),
             
             // start or end of line conditions
-            RegexType::Hat
-                | RegexType::Dollar => TokenType::StartOrEndCondition(value),
+            RegexType::LineStart
+                | RegexType::LineEnd => TokenType::StartOrEndCondition(value),
 
 
             _ => TokenType::Literal(value)
@@ -234,8 +230,8 @@ impl RegexType {
                 | RegexType::Concatenation => TokenType::BinaryOperator(self.clone()),
             
             // start or end of line conditions
-            RegexType::Hat
-                | RegexType::Dollar => TokenType::StartOrEndCondition(self.clone()),
+            RegexType::LineStart
+                | RegexType::LineEnd => TokenType::StartOrEndCondition(self.clone()),
 
             _ => TokenType::Literal(self.clone())
         }
@@ -447,17 +443,13 @@ impl Regex {
 
             '+' => RegexType::Quant(Quantifier::AtLeast(1)),
 
-            '-' => RegexType::Minus,
-
-            ',' => RegexType::Comma,
-
             '(' => RegexType::OpenParenthesis,
 
             ')' => RegexType::CloseParenthesis,
 
-            '^' => RegexType::Hat,
+            '^' => RegexType::LineStart,
 
-            '$' => RegexType::Dollar,
+            '$' => RegexType::LineEnd,
 
             '?' => RegexType::QuestionMark,
 
@@ -630,7 +622,7 @@ impl CharacterClass {
         Err(ParsingError::unrecognized_rule().because("Unclosed character class"))
     }
 
-    // Compatibility methods to create instances that match the old enum API
+    // Compatibility methods to create instances tLineStart match the old enum API
     pub fn from_single(c: char) -> Self {
         let mut class = Self::new();
         class.add_char(c);
