@@ -27,17 +27,17 @@ fn test_into_type_special_chars() {
 fn test_into_type_escape_sequences() {
     let mut chars = "d".chars();
     if let RegexType::Class(class) = Regex::into_type('\\', &mut chars) {
-        assert!(class.matches('0'));
-        assert!(!class.matches('a'));
+        assert!(class.matches(&'0'));
+        assert!(!class.matches(&'a'));
     } else {
         panic!("Expected a CharacterClass for digit");
     }
     
     let mut chars = "w".chars();
     if let RegexType::Class(class) = Regex::into_type('\\', &mut chars) {
-        assert!(class.matches('a'));
-        assert!(class.matches('_'));
-        assert!(!class.matches(' '));
+        assert!(class.matches(&'a'));
+        assert!(class.matches(&'_'));
+        assert!(!class.matches(&' '));
     } else {
         panic!("Expected a CharacterClass for word char");
     }
@@ -96,9 +96,9 @@ fn test_tokens_with_character_classes() -> ParsingResult<()> {
     assert!(matches!(tokens[0], RegexType::Char('a')));
     
     if let RegexType::Class(class) = &tokens[1] {
-        assert!(class.contains_char('b'));
-        assert!(class.contains_char('c'));
-        assert!(!class.contains_char('a'));
+        assert!(class.contains_char(&'b'));
+        assert!(class.contains_char(&'c'));
+        assert!(!class.contains_char(&'a'));
     } else {
         panic!("Expected a character class");
     }
@@ -118,10 +118,10 @@ fn test_tokens_with_negated_character_class() -> ParsingResult<()> {
     if let RegexType::Class(class) = &tokens[0] {
         // Check if it's negated by verifying that it doesn't match characters in the class
         // but matches characters outside the class
-        assert!(!class.matches('a'));
-        assert!(!class.matches('b'));
-        assert!(!class.matches('c'));
-        assert!(class.matches('x'));
+        assert!(!class.matches(&'a'));
+        assert!(!class.matches(&'b'));
+        assert!(!class.matches(&'c'));
+        assert!(class.matches(&'x'));
     } else {
         panic!("Expected a character class");
     }
@@ -138,24 +138,24 @@ fn test_tokens_with_shorthand_classes() -> ParsingResult<()> {
     
     // Check digit class
     if let RegexType::Class(class) = &tokens[0] {
-        assert!(class.matches('0'));
-        assert!(!class.matches('a'));
+        assert!(class.matches(&'0'));
+        assert!(!class.matches(&'a'));
     } else {
         panic!("Expected a digit class");
     }
     
     // Check word class
     if let RegexType::Class(class) = &tokens[1] {
-        assert!(class.matches('a'));
-        assert!(class.matches('_'));
+        assert!(class.matches(&'a'));
+        assert!(class.matches(&'_'));
     } else {
         panic!("Expected a word class");
     }
     
     // Check whitespace class
     if let RegexType::Class(class) = &tokens[2] {
-        assert!(class.matches(' '));
-        assert!(class.matches('\t'));
+        assert!(class.matches(&' '));
+        assert!(class.matches(&'\t'));
     } else {
         panic!("Expected a whitespace class");
     }
@@ -177,9 +177,9 @@ fn test_complex_regex_pattern() -> ParsingResult<()> {
     
     // Check character class
     if let RegexType::Class(class) = &tokens[6] {
-        assert!(class.matches('0'));
-        assert!(class.matches('9'));
-        assert!(!class.matches('a'));
+        assert!(class.matches(&'0'));
+        assert!(class.matches(&'9'));
+        assert!(!class.matches(&'a'));
     } else {
         panic!("Expected a digit character class");
     }
@@ -188,8 +188,8 @@ fn test_complex_regex_pattern() -> ParsingResult<()> {
     
     // Check word char class
     if let RegexType::Class(class) = &tokens[8] {
-        assert!(class.matches('a'));
-        assert!(class.matches('_'));
+        assert!(class.matches(&'a'));
+        assert!(class.matches(&'_'));
     } else {
         panic!("Expected a word character class");
     }
@@ -366,9 +366,9 @@ fn test_regex_new_with_character_classes() -> ParsingResult<()> {
     assert!(result.len() >= 5);
     
     if let TokenType::Literal(RegexType::Class(class1)) = &result[0] {
-        assert!(class1.matches('a'));
-        assert!(class1.matches('z'));
-        assert!(!class1.matches('0'));
+        assert!(class1.matches(&'a'));
+        assert!(class1.matches(&'z'));
+        assert!(!class1.matches(&'0'));
     } else {
         panic!("Expected a character class at position 0");
     }
@@ -376,9 +376,9 @@ fn test_regex_new_with_character_classes() -> ParsingResult<()> {
     assert!(matches!(result[1], TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1)))));
     
     if let TokenType::Literal(RegexType::Class(class2)) = &result[2] {
-        assert!(class2.matches('0'));
-        assert!(class2.matches('9'));
-        assert!(!class2.matches('a'));
+        assert!(class2.matches(&'0'));
+        assert!(class2.matches(&'9'));
+        assert!(!class2.matches(&'a'));
     } else {
         panic!("Expected a digit class at position 2");
     }
@@ -402,18 +402,18 @@ fn test_character_class_from_shorthand() -> ParsingResult<()> {
     assert!(CharacterClass::from_shorthand('x').is_err());
     
     let digit_class = CharacterClass::from_shorthand('d')?;
-    assert!(digit_class.matches('0'));
-    assert!(!digit_class.matches('a'));
+    assert!(digit_class.matches(&'0'));
+    assert!(!digit_class.matches(&'a'));
     
     let word_class = CharacterClass::from_shorthand('w')?;
-    assert!(word_class.matches('a'));
-    assert!(word_class.matches('_'));
-    assert!(!word_class.matches(' '));
+    assert!(word_class.matches(&'a'));
+    assert!(word_class.matches(&'_'));
+    assert!(!word_class.matches(&' '));
     
     let space_class = CharacterClass::from_shorthand('s')?;
-    assert!(space_class.matches(' '));
-    assert!(space_class.matches('\t'));
-    assert!(!space_class.matches('a'));
+    assert!(space_class.matches(&' '));
+    assert!(space_class.matches(&'\t'));
+    assert!(!space_class.matches(&'a'));
     
     Ok(())
 }
@@ -454,13 +454,13 @@ fn test_character_class_basic() {
     class.add_char('b');
     class.add_char('c');
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('b'));
-    assert!(class.contains_char('c'));
-    assert!(!class.contains_char('d'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'b'));
+    assert!(class.contains_char(&'c'));
+    assert!(!class.contains_char(&'d'));
     
-    assert!(class.matches('a'));
-    assert!(!class.matches('d'));
+    assert!(class.matches(&'a'));
+    assert!(!class.matches(&'d'));
 }
 
 #[test]
@@ -468,18 +468,18 @@ fn test_character_class_range() {
     let mut class = CharacterClass::new();
     class.add_range('a', 'z');
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('m'));
-    assert!(class.contains_char('z'));
-    assert!(!class.contains_char('A'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'m'));
+    assert!(class.contains_char(&'z'));
+    assert!(!class.contains_char(&'A'));
 }
 
 #[test]
 fn test_character_class_negated() {
     let class = CharacterClass::new().negated();
     
-    assert!(!class.contains_char('a')); // Empty class contains nothing
-    assert!(class.matches('a')); // But negated matches everything
+    assert!(!class.contains_char(&'a')); // Empty class contains nothing
+    assert!(class.matches(&'a')); // But negated matches everything
 }
 
 #[test]
@@ -489,13 +489,13 @@ fn test_character_class_complex() {
     class.add_char('b');
     class.add_range('x', 'z');
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('b'));
-    assert!(!class.contains_char('c'));
-    assert!(class.contains_char('x'));
-    assert!(class.contains_char('y'));
-    assert!(class.contains_char('z'));
-    assert!(!class.contains_char('w'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'b'));
+    assert!(!class.contains_char(&'c'));
+    assert!(class.contains_char(&'x'));
+    assert!(class.contains_char(&'y'));
+    assert!(class.contains_char(&'z'));
+    assert!(!class.contains_char(&'w'));
 }
 
 #[test]
@@ -504,10 +504,10 @@ fn test_character_class_parse() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('b'));
-    assert!(class.contains_char('c'));
-    assert!(!class.contains_char('d'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'b'));
+    assert!(class.contains_char(&'c'));
+    assert!(!class.contains_char(&'d'));
     
     Ok(())
 }
@@ -518,10 +518,10 @@ fn test_character_class_parse_range() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('m'));
-    assert!(class.contains_char('z'));
-    assert!(!class.contains_char('A'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'m'));
+    assert!(class.contains_char(&'z'));
+    assert!(!class.contains_char(&'A'));
     
     Ok(())
 }
@@ -532,13 +532,13 @@ fn test_character_class_parse_complex() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('b'));
-    assert!(class.contains_char('c'));
-    assert!(!class.contains_char('d'));
-    assert!(class.contains_char('x'));
-    assert!(class.contains_char('y'));
-    assert!(class.contains_char('z'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'b'));
+    assert!(class.contains_char(&'c'));
+    assert!(!class.contains_char(&'d'));
+    assert!(class.contains_char(&'x'));
+    assert!(class.contains_char(&'y'));
+    assert!(class.contains_char(&'z'));
     
     Ok(())
 }
@@ -549,10 +549,10 @@ fn test_character_class_parse_negated() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(!class.matches('a'));
-    assert!(!class.matches('b'));
-    assert!(!class.matches('c'));
-    assert!(class.matches('d'));
+    assert!(!class.matches(&'a'));
+    assert!(!class.matches(&'b'));
+    assert!(!class.matches(&'c'));
+    assert!(class.matches(&'d'));
     
     Ok(())
 }
@@ -570,14 +570,14 @@ fn test_character_class_merge() {
     class1.merge(&class2);
     
     // Check that class1 now contains all characters from both classes
-    assert!(class1.contains_char('a'));
-    assert!(class1.contains_char('b'));
-    assert!(class1.contains_char('0'));
-    assert!(class1.contains_char('5'));
-    assert!(class1.contains_char('9'));
-    assert!(class1.contains_char('x'));
-    assert!(class1.contains_char('y'));
-    assert!(class1.contains_char('z'));
+    assert!(class1.contains_char(&'a'));
+    assert!(class1.contains_char(&'b'));
+    assert!(class1.contains_char(&'0'));
+    assert!(class1.contains_char(&'5'));
+    assert!(class1.contains_char(&'9'));
+    assert!(class1.contains_char(&'x'));
+    assert!(class1.contains_char(&'y'));
+    assert!(class1.contains_char(&'z'));
 }
 
 #[test]
@@ -590,8 +590,8 @@ fn test_character_class_merge_with_negated() {
     // Merging with a negated class should not change class1
     class1.merge(&class2);
     
-    assert!(class1.contains_char('a'));
-    assert!(!class1.contains_char('b'));
+    assert!(class1.contains_char(&'a'));
+    assert!(!class1.contains_char(&'b'));
 }
 
 #[test]
@@ -601,16 +601,16 @@ fn test_character_class_parse_edge_cases() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('-'));
-    assert!(class.contains_char('a'));
+    assert!(class.contains_char(&'-'));
+    assert!(class.contains_char(&'a'));
     
     // Test dash at end
     let input = "abc-]";
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('-'));
-    assert!(class.contains_char('a'));
+    assert!(class.contains_char(&'-'));
+    assert!(class.contains_char(&'a'));
     
     Ok(())
 }
@@ -621,9 +621,9 @@ fn test_character_class_parse_with_escapes() -> ParsingResult<()> {
     let mut chars = input.chars();
     let class = CharacterClass::parse(&mut chars)?;
     
-    assert!(class.contains_char('a'));
-    assert!(class.contains_char('\n'));
-    assert!(class.contains_char('\t'));
+    assert!(class.contains_char(&'a'));
+    assert!(class.contains_char(&'\n'));
+    assert!(class.contains_char(&'\t'));
     
     Ok(())
 }
@@ -632,62 +632,62 @@ fn test_character_class_parse_with_escapes() -> ParsingResult<()> {
 fn test_character_class_predefined_methods() {
     // Test digit class
     let digit = CharacterClass::digit();
-    assert!(digit.matches('0'));
-    assert!(digit.matches('9'));
-    assert!(!digit.matches('a'));
+    assert!(digit.matches(&'0'));
+    assert!(digit.matches(&'9'));
+    assert!(!digit.matches(&'a'));
     
     // Test non-digit class
     let non_digit = CharacterClass::non_digit();
-    assert!(!non_digit.matches('0'));
-    assert!(non_digit.matches('a'));
+    assert!(!non_digit.matches(&'0'));
+    assert!(non_digit.matches(&'a'));
     
     // Test word char class
     let word = CharacterClass::word_char();
-    assert!(word.matches('a'));
-    assert!(word.matches('Z'));
-    assert!(word.matches('0'));
-    assert!(word.matches('_'));
-    assert!(!word.matches(' '));
-    assert!(!word.matches('-'));
+    assert!(word.matches(&'a'));
+    assert!(word.matches(&'Z'));
+    assert!(word.matches(&'0'));
+    assert!(word.matches(&'_'));
+    assert!(!word.matches(&' '));
+    assert!(!word.matches(&'-'));
     
     // Test non-word char class
     let non_word = CharacterClass::non_word_char();
-    assert!(!non_word.matches('a'));
-    assert!(non_word.matches(' '));
-    assert!(non_word.matches('-'));
+    assert!(!non_word.matches(&'a'));
+    assert!(non_word.matches(&' '));
+    assert!(non_word.matches(&'-'));
     
     // Test whitespace class
     let space = CharacterClass::whitespace();
-    assert!(space.matches(' '));
-    assert!(space.matches('\t'));
-    assert!(space.matches('\n'));
-    assert!(space.matches('\r'));
-    assert!(!space.matches('a'));
+    assert!(space.matches(&' '));
+    assert!(space.matches(&'\t'));
+    assert!(space.matches(&'\n'));
+    assert!(space.matches(&'\r'));
+    assert!(!space.matches(&'a'));
     
     // Test non-whitespace class
     let non_space = CharacterClass::non_whitespace();
-    assert!(!non_space.matches(' '));
-    assert!(non_space.matches('a'));
+    assert!(!non_space.matches(&' '));
+    assert!(non_space.matches(&'a'));
 }
 
 #[test]
 fn test_character_class_convenience_constructors() {
     // Test single character constructor
     let single = CharacterClass::single('x');
-    assert!(single.contains_char('x'));
-    assert!(!single.contains_char('y'));
+    assert!(single.contains_char(&'x'));
+    assert!(!single.contains_char(&'y'));
     
     // Test range constructor
     let range = CharacterClass::range('a', 'c');
-    assert!(range.contains_char('a'));
-    assert!(range.contains_char('b'));
-    assert!(range.contains_char('c'));
-    assert!(!range.contains_char('d'));
+    assert!(range.contains_char(&'a'));
+    assert!(range.contains_char(&'b'));
+    assert!(range.contains_char(&'c'));
+    assert!(!range.contains_char(&'d'));
     
     // Test negated helper
     let negated = CharacterClass::from_negated(CharacterClass::single('x'));
-    assert!(!negated.matches('x'));
-    assert!(negated.matches('y'));
+    assert!(!negated.matches(&'x'));
+    assert!(negated.matches(&'y'));
 }
 
 #[test]
@@ -705,8 +705,8 @@ fn test_character_class_empty() -> ParsingResult<()> {
     let class = CharacterClass::parse(&mut chars)?;
     
     // Empty class should match nothing
-    assert!(!class.contains_char('a'));
-    assert!(!class.contains_char('b'));
+    assert!(!class.contains_char(&'a'));
+    assert!(!class.contains_char(&'b'));
     
     Ok(())
 }
@@ -718,8 +718,8 @@ fn test_character_class_add_invalid_range() {
     // Adding a range where start > end should be ignored
     class.add_range('z', 'a');
     
-    assert!(!class.contains_char('a'));
-    assert!(!class.contains_char('z'));
+    assert!(!class.contains_char(&'a'));
+    assert!(!class.contains_char(&'z'));
 }
 
 #[test]

@@ -4,6 +4,9 @@ pub use re2post::*;
 mod post2nfa;
 pub use post2nfa::*;
 
+mod nfa_simulation;
+pub use nfa_simulation::*;
+
 
 use std::{collections::VecDeque, fmt, ops, str::Chars};
 
@@ -237,9 +240,16 @@ impl RegexType {
         }
     }
 
-    pub fn is_special_character(&self) -> bool {
-        todo!()
-    }
+    pub fn match_(&self, c: &char) -> bool {
+
+		match self {
+			RegexType::Char(char) => char == c,
+
+			RegexType::Class(class) => class.matches(c),
+
+			_ => todo!()
+		}
+	}
 }
 
 impl TokenType {
@@ -493,7 +503,7 @@ impl CharacterClass {
 
     pub fn add_char(&mut self, c: char) {
         // Only add if not already in a range or singles
-        if !self.contains_char(c) {
+        if !self.contains_char(&c) {
             self.singles.push(c);
         }
     }
@@ -516,13 +526,13 @@ impl CharacterClass {
     }
 
     // Check if a character is contained in this class
-    pub fn contains_char(&self, c: char) -> bool {
-        self.singles.contains(&c) || 
-        self.ranges.iter().any(|(start, end)| *start <= c && c <= *end)
+    pub fn contains_char(&self, c: &char) -> bool {
+        self.singles.contains(c) || 
+        self.ranges.iter().any(|(start, end)| start <= c && c <= end)
     }
 
     // Check if a character matches this class (considering negation)
-    pub fn matches(&self, c: char) -> bool {
+    pub fn matches(&self, c: &char) -> bool {
         let contains = self.contains_char(c);
         if self.negated {
             !contains

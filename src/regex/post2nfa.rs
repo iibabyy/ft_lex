@@ -1,10 +1,14 @@
-use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
+use std::{cell::RefCell, fmt, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
 use super::*;
 use utils::*;
 
-type StatePtr = Option<Rc<State>>;
+// 1. BASIC TYPE DEFINITIONS
+// =========================
 
+pub type StatePtr = Option<Rc<State>>;
+
+#[derive(Debug)]
 pub enum State {
 	Basic(BasicState),
 	Split(SplitState),
@@ -12,22 +16,32 @@ pub enum State {
 	Match
 }
 
+#[derive(Debug)]
 pub struct BasicState {
 	pub c: RegexType,
-
 	pub out: StatePtr,
 }
 
+#[derive(Debug)]
 pub struct SplitState {
 	pub out1: StatePtr,
 	pub out2: StatePtr,
 }
 
+#[derive(Debug)]
+pub struct Fragment {
+	pub start: StatePtr,
+	pub ptr_list: Vec<*mut StatePtr>,
+}
+
+// 2. TYPE-SPECIFIC METHODS
+// ========================
+
 impl State {
 	pub fn basic(litteral: RegexType) -> StatePtr {
 		let res = Self::Basic(BasicState {
 			c: litteral,
-			out: None
+			out: None,
 		});
 
 		Some(Rc::new(res))
@@ -36,13 +50,13 @@ impl State {
 	pub fn split(out1: StatePtr, out2: StatePtr) -> StatePtr {
 		let res = Self::Split(SplitState {
 			out1,
-			out2
+			out2,
 		});
 
 		Some(Rc::new(res))
 	}
 
-	pub fn match_() -> StatePtr {
+	pub fn matche() -> StatePtr {
 		let res = Self::Match;
 
 		Some(Rc::new(res))
@@ -82,6 +96,22 @@ impl State {
 		}
 	}
 
+	pub fn into_split(&self) -> Option<&SplitState> {
+		match self {
+			Self::Split(split) => Some(split),
+
+			_ => None,
+		}
+	}
+
+	pub fn into_basic(&self) -> Option<&BasicState> {
+		match self {
+			Self::Basic(basic) => Some(basic),
+
+			_ => None,
+		}
+	}
+
 	pub fn split_out1(&mut self) -> Option<*mut StatePtr> {
 		match self {
 			State::Split(state) => {
@@ -106,12 +136,8 @@ impl State {
 		}
 	}
 
-	pub fn deep_clone(state: &StatePtr) -> (StatePtr, Vec<*mut StatePtr>) {
-		if state.is_none() {
-			return (None, vec![])
-		}
-
-		match state.as_ref().unwrap().as_ref() {
+	fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<*mut StatePtr>) {
+		match self {
 
 			State::Basic(basic) => {
 				let cloned_regex = basic.c.clone();
@@ -119,7 +145,10 @@ impl State {
 				let (cloned_out, cloned_ptr_list) = Self::deep_clone(&basic.out);
 				let out_is_some = cloned_out.is_some();
 
-				let mut state = Rc::new(State::Basic(BasicState { c: cloned_regex, out: cloned_out }));
+				let mut state = Rc::new(State::Basic(BasicState {
+					c: cloned_regex,
+					out: cloned_out,
+				}));
 
 				let ptr_list = if out_is_some {
 					cloned_ptr_list
@@ -140,7 +169,10 @@ impl State {
 				let (cloned_out2, cloned_ptr_list2) = Self::deep_clone(&split.out2);
 				let cloned_2_is_some = cloned_out2.is_some();
 
-				let mut state = Rc::new(State::Split(SplitState { out1: cloned_out1, out2: cloned_out2 }));
+				let mut state = Rc::new(State::Split(SplitState {
+					out1: cloned_out1,
+					out2: cloned_out2,
+				}));
 
 				let mut ptr_list1 = if cloned_1_is_some {
 					cloned_ptr_list1
@@ -162,29 +194,60 @@ impl State {
 
 				(Some(state), ptr_list1)
 
-			}
+			},
 
-			State::Match => (Some(Rc::new(State::Match)), vec![]),
+			State::Match => {
+				let state = State::Match;
 
-			State::NoMatch => (Some(Rc::new(State::NoMatch)), vec![]),
+				(Some(Rc::new(state)), vec![])
+			},
+
+			State::NoMatch => {
+				let state = State::NoMatch;
+
+				(Some(Rc::new(state)), vec![])
+			},
 
 		}
 	}
 
-}
+	pub fn deep_clone(state: &StatePtr) -> (StatePtr, Vec<*mut StatePtr>) {
+		if state.is_none() {
+			return (None, vec![])
+		}
 
-pub struct Fragment {
-	pub start: StatePtr,
+		state.as_ref().unwrap().as_ref().self_ptr_deep_clone()
+	}
 
-	pub ptr_list: Vec<*mut StatePtr>
+	pub fn matche_with(&self, c: &char) -> bool {
+		match self {
+
+			Self::Basic(basic) => basic.c.match_(&c),
+
+			_ => false
+		}
+	}
 }
 
 impl Fragment {
 	pub fn new(start: StatePtr, ptr_list: Vec<*mut StatePtr>) -> Self {
 		Self {
 			start,
-			ptr_list
+			ptr_list,
 		}
+	}
+
+	pub fn char(start: StatePtr) -> Self {
+		let mut frag = Fragment {
+			start,
+			ptr_list: vec![]
+		};
+
+		let state_ptr = &mut frag.start as *mut Option<Rc<State>>;
+
+		frag.ptr_list.push(state_ptr);
+
+		return frag
 	}
 
 	pub fn and(self, e2: Self) -> Self {
@@ -210,11 +273,19 @@ impl Fragment {
 	}
 
 	pub fn optional_repeat(self) -> Self {
-		let mut s = State::split(self.start, State::null());
+		let s = State::split(self.start, State::null());
 
 		utils::patch(self.ptr_list, &s);
 
-		let out1 = Rc::get_mut(s.as_mut().unwrap()).unwrap().split_out1().unwrap();
+		let mut_s = unsafe {
+			// Get raw pointer to the data
+			let ptr = Rc::as_ptr(s.as_ref().unwrap()) as *mut State;
+			// Dereference the pointer to get a mutable reference
+			&mut *ptr
+		};
+
+
+		let out1 = mut_s.split_out1().unwrap();
 
 		let ptr_list = utils::list1(out1);
 
@@ -243,6 +314,7 @@ impl Fragment {
 	pub fn at_least(self, n: &usize) -> Self {
 		let fragment = self.exact_repeat(n);
 
+		dbg!(&fragment);
 		fragment.optional_repeat()
 	}
 
@@ -263,7 +335,7 @@ impl Fragment {
 			
 			fragment.and(optional_part)
 		} else {
-			self.exact_repeat(&0)
+			panic!("Invalid Range parameter")
 		}
 	}
 
@@ -272,7 +344,7 @@ impl Fragment {
 
 		Self {
 			start: cloned_start,
-			ptr_list: cloned_ptr_list
+			ptr_list: cloned_ptr_list,
 		}
 	}
 
@@ -295,8 +367,48 @@ impl Fragment {
 			},
 		}
 	}
-
 }
+
+// 3. DISPLAY IMPLEMENTATIONS
+// =========================
+
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            State::Basic(basic) => write!(f, "Basic({}, {:?})", basic.c, basic.out.as_ref().map(|_| "...")),
+            State::Split(_) => write!(f, "Split({:?}, {:?})", "...", "..."),
+            State::NoMatch => write!(f, "NoMatch()"),
+            State::Match => write!(f, "Match()"),
+        }
+    }
+}
+
+impl fmt::Display for BasicState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{ c: {}, out: {:?} }}", self.c, self.out.as_ref().map(|_| "..."))
+    }
+}
+
+impl fmt::Display for SplitState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{ out1: {:?}, out2: {:?} }}", 
+            self.out1.as_ref().map(|_| "..."),
+            self.out2.as_ref().map(|_| "...")
+        )
+    }
+}
+
+impl fmt::Display for Fragment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Fragment {{ start: {:?}, ptr_list: [{}] }}", 
+            self.start.as_ref().map(|_| "..."),
+            self.ptr_list.len()
+        )
+    }
+}
+
+// 4. NFA CONSTRUCTION FUNCTIONS
+// =============================
 
 pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 	let mut fragments: Vec<Fragment> = vec![];
@@ -304,24 +416,23 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 	while let Some(token) = postfix.pop_front() {
 		match token.into_owned_inner() {
 			RegexType::Concatenation => {
-				let e1 = fragments.pop()
+				let e2 = fragments.pop()
 					.ok_or(ParsingError::unrecognized_rule())?;
 
-				let e2 = fragments.pop()
+				let e1 = fragments.pop()
 					.ok_or(ParsingError::unrecognized_rule())?;
 
 				fragments.push(e1.and(e2));
 			}
 
 			RegexType::Or => {
+				let e2 = fragments.pop()
+					.ok_or(ParsingError::unrecognized_rule().because("Unexpected '|'"))?;
+
 				let e1 = fragments.pop()
 					.ok_or(ParsingError::unrecognized_rule().because("Unexpected '|'"))?;
 
-				let e2 = fragments.pop()
-				.ok_or(ParsingError::unrecognized_rule().because("Unexpected '|'"))?;
-
 				fragments.push(e1.or(e2));
-
 			},
 
 			RegexType::QuestionMark => {
@@ -341,9 +452,9 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 			c => {
 				let mut s = State::basic(c);
 
-				let ptr_list = utils::list1(&mut s as *mut Option<Rc<State>>);
+				let frag = Fragment::char(s);
 
-				fragments.push(Fragment::new(s, ptr_list));
+				fragments.push(frag);
 			}
 		}
 	}
@@ -355,11 +466,14 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 	let e = fragments.pop().unwrap();
 	utils::last_patch(e.ptr_list);
 
-	match &e.start {
-		Some(state) => Ok(Rc::clone(state)),
+	match e.start {
+		Some(state) => Ok(state),
 		None => Err(ParsingError::unrecognized_rule())
 	}
 }
+
+// 4. UTILITY FUNCTIONS
+// ====================
 
 pub mod utils {
 	use super::*;
