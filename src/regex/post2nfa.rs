@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
+use std::{cell::{RefCell, UnsafeCell}, fmt, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
 use super::*;
 use utils::*;
@@ -6,14 +6,15 @@ use utils::*;
 // 1. BASIC TYPE DEFINITIONS
 // =========================
 
-pub type StatePtr = Option<Rc<State>>;
+pub type StatePtr = Rc<UnsafeCell<Rc<State>>>;
 
 #[derive(Debug)]
 pub enum State {
 	Basic(BasicState),
 	Split(SplitState),
 	NoMatch,
-	Match
+	Match,
+	None
 }
 
 #[derive(Debug)]
@@ -30,8 +31,8 @@ pub struct SplitState {
 
 #[derive(Debug)]
 pub struct Fragment {
-	pub start: StatePtr,
-	pub ptr_list: Vec<*mut StatePtr>,
+	pub start: Rc<State>,
+	pub ptr_list: Vec<StatePtr>,
 }
 
 // 2. TYPE-SPECIFIC METHODS
@@ -41,10 +42,10 @@ impl State {
 	pub fn basic(litteral: RegexType) -> StatePtr {
 		let res = Self::Basic(BasicState {
 			c: litteral,
-			out: None,
+			out: State::none(),
 		});
 
-		Some(Rc::new(res))
+		Rc::new(UnsafeCell::new(Rc::new(res)))
 	}
 
 	pub fn split(out1: StatePtr, out2: StatePtr) -> StatePtr {
@@ -53,41 +54,96 @@ impl State {
 			out2,
 		});
 
-		Some(Rc::new(res))
+		Rc::new(UnsafeCell::new(Rc::new(res)))
 	}
 
-	pub fn matche() -> StatePtr {
+	pub fn match_() -> StatePtr {
 		let res = Self::Match;
 
-		Some(Rc::new(res))
+		Rc::new(UnsafeCell::new(Rc::new(res)))
 	}
 
 	pub fn no_match() -> StatePtr {
 		let res = Self::NoMatch;
 
-		Some(Rc::new(res))
+		Rc::new(UnsafeCell::new(Rc::new(res)))
 	}
 
-	pub fn null() -> StatePtr {
-		None
+	pub fn none() -> StatePtr {
+		Rc::new(UnsafeCell::new(Rc::new(State::None)))
 	}
 
-	pub fn basic_out(&mut self) -> Option<*mut StatePtr> {
+	pub fn is_none(&self) -> bool {
+		matches!(self, State::None)
+	}
+
+	pub fn is_basic(&self) -> bool {
+		matches!(self, State::Basic(_))
+	}
+
+	pub fn is_split(&self) -> bool {
+		matches!(self, State::Split(_))
+	}
+
+	pub fn is_match(&self) -> bool {
+		matches!(self, State::Match)
+	}
+
+	pub fn is_nomatch(&self) -> bool {
+		matches!(self, State::NoMatch)
+	}
+
+	pub fn is_basic_ptr(ptr: &StatePtr) -> bool {
+		unsafe {
+			(&*ptr.get()).is_basic()
+		}
+	}
+
+	pub fn is_split_ptr(ptr: &StatePtr) -> bool {
+		unsafe {
+			(&*ptr.get()).is_split()
+		}
+	}
+
+	pub fn is_none_ptr(ptr: &StatePtr) -> bool {
+		unsafe {
+			(&*ptr.get()).is_none()
+		}
+	}
+
+	pub fn is_match_ptr(ptr: &StatePtr) -> bool {
+		unsafe {
+			(&*ptr.get()).is_match()
+		}
+	}
+
+	pub fn is_nomatch_ptr(ptr: &StatePtr) -> bool {
+		unsafe {
+			(&*ptr.get()).is_nomatch()
+		}
+	}
+
+	pub fn from_ptr(ptr: &StatePtr) -> Rc<Self> {
+		unsafe {
+			Rc::clone(&*ptr.get())
+		}
+	}
+
+	pub fn basic_out(&self) -> Option<StatePtr> {
 		match self {
 			State::Basic(state) => {
-				let ptr = &mut state.out as *mut Option<Rc<State>>;
-				Some(ptr)
+				Some(Rc::clone(&state.out))
 			},
 
 			_ => None
 		}
 	}
 
-	pub fn split_out(&mut self) -> Option<(*mut StatePtr, *mut StatePtr)> {
+	pub fn split_out(&self) -> Option<(StatePtr, StatePtr)> {
 		match self {
 			State::Split(state) => {
-				let ptr1 = &mut state.out1 as *mut Option<Rc<State>>;
-				let ptr2 = &mut state.out2 as *mut Option<Rc<State>>;
+				let ptr1 = Rc::clone(&state.out1);
+				let ptr2 = Rc::clone(&state.out2);
 
 				Some((ptr1, ptr2))
 			},
@@ -112,72 +168,47 @@ impl State {
 		}
 	}
 
-	pub fn split_out1(&mut self) -> Option<*mut StatePtr> {
-		match self {
-			State::Split(state) => {
-				let ptr = &mut state.out1 as *mut Option<Rc<State>>;
-
-				Some(ptr)
-			},
-
-			_ => None
-		}
-	}
-
-	pub fn split_out2(&mut self) -> Option<*mut StatePtr> {
-		match self {
-			State::Split(state) => {
-				let ptr = &mut state.out2 as *mut Option<Rc<State>>;
-
-				Some(ptr)
-			},
-
-			_ => None
-		}
-	}
-
-	fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<*mut StatePtr>) {
+	fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<StatePtr>) {
 		match self {
 
 			State::Basic(basic) => {
 				let cloned_regex = basic.c.clone();
 
 				let (cloned_out, cloned_ptr_list) = Self::deep_clone(&basic.out);
-				let out_is_some = cloned_out.is_some();
+				let cloned_out_is_some = State::is_none_ptr(&cloned_out) == false;
 
-				let mut state = Rc::new(State::Basic(BasicState {
+				let state = Rc::new(UnsafeCell::new(Rc::new(State::Basic(BasicState {
 					c: cloned_regex,
 					out: cloned_out,
-				}));
+				}))));
 
-				let ptr_list = if out_is_some {
+				let ptr_list = if cloned_out_is_some {
 					cloned_ptr_list
 				} else {
-					let ptr = Rc::get_mut(&mut state).unwrap().basic_out().unwrap();
+					let ptr = State::from_ptr(&state).basic_out().unwrap();
 
 					vec![ptr]
-				};
+				}; 
 
-				(Some(state), ptr_list)
-
+				(state, ptr_list)
 			},
 
 			State::Split(split) => {
 				let (cloned_out1, cloned_ptr_list1) = Self::deep_clone(&split.out1);
-				let cloned_1_is_some = cloned_out1.is_some();
+				let cloned_1_is_some = State::is_none_ptr(&cloned_out1);
 
 				let (cloned_out2, cloned_ptr_list2) = Self::deep_clone(&split.out2);
-				let cloned_2_is_some = cloned_out2.is_some();
+				let cloned_2_is_some = State::is_none_ptr(&cloned_out2);
 
-				let mut state = Rc::new(State::Split(SplitState {
+				let state = Rc::new(UnsafeCell::new(Rc::new(State::Split(SplitState {
 					out1: cloned_out1,
 					out2: cloned_out2,
-				}));
+				}))));
 
 				let mut ptr_list1 = if cloned_1_is_some {
 					cloned_ptr_list1
 				} else {
-					let ptr1 = Rc::get_mut(&mut state).unwrap().split_out1().unwrap();
+					let ptr1 = State::from_ptr(&state).split_out().unwrap().0;
 
 					vec![ptr1]
 				};
@@ -185,38 +216,36 @@ impl State {
 				let prt_list_2 = if cloned_2_is_some {
 					cloned_ptr_list2
 				} else {
-					let ptr2 = Rc::get_mut(&mut state).unwrap().split_out2().unwrap();
+					let ptr2 = State::from_ptr(&state).split_out().unwrap().1;
 
 					vec![ptr2]
 				};
 
 				ptr_list1.extend(prt_list_2);
 
-				(Some(state), ptr_list1)
-
+				(state, ptr_list1)
 			},
 
 			State::Match => {
-				let state = State::Match;
-
-				(Some(Rc::new(state)), vec![])
+				(Rc::new(UnsafeCell::new(Rc::new(State::NoMatch))), vec![])
 			},
 
 			State::NoMatch => {
-				let state = State::NoMatch;
-
-				(Some(Rc::new(state)), vec![])
+				(Rc::new(UnsafeCell::new(Rc::new(State::NoMatch))), vec![])
 			},
 
+			State::None => {
+				(Rc::new(UnsafeCell::new(Rc::new(State::None))), vec![])
+			}
 		}
 	}
 
-	pub fn deep_clone(state: &StatePtr) -> (StatePtr, Vec<*mut StatePtr>) {
-		if state.is_none() {
-			return (None, vec![])
+	pub fn deep_clone(state: &StatePtr) -> (StatePtr, Vec<StatePtr>) {
+		if State::is_none_ptr(state) {
+			return (State::none(), vec![])
 		}
 
-		state.as_ref().unwrap().as_ref().self_ptr_deep_clone()
+		State::from_ptr(state).self_ptr_deep_clone()
 	}
 
 	pub fn matche_with(&self, c: &char) -> bool {
@@ -230,22 +259,21 @@ impl State {
 }
 
 impl Fragment {
-	pub fn new(start: StatePtr, ptr_list: Vec<*mut StatePtr>) -> Self {
+	pub fn new(start: Rc<State>, ptr_list: Vec<StatePtr>) -> Self {
 		Self {
 			start,
 			ptr_list,
 		}
 	}
 
-	pub fn char(start: StatePtr) -> Self {
+	pub fn char(start: Rc<State>) -> Self {
+		let ptr = start.basic_out().unwrap();
 		let mut frag = Fragment {
 			start,
 			ptr_list: vec![]
 		};
 
-		let state_ptr = &mut frag.start as *mut Option<Rc<State>>;
-
-		frag.ptr_list.push(state_ptr);
+		frag.ptr_list.push(ptr);
 
 		return frag
 	}
@@ -255,7 +283,7 @@ impl Fragment {
 
 		Fragment::new(self.start, e2.ptr_list)
 	}
-	
+
 	pub fn or(self, e2: Self) -> Self {
 		let s = State::split(self.start, e2.start);
 
@@ -263,9 +291,9 @@ impl Fragment {
 	}
 
 	pub fn optional(self) -> Self {
-		let mut s = State::split(self.start, State::null());
+		let mut s = State::split(self.start, State::none());
 
-		let out2 = Rc::get_mut(s.as_mut().unwrap()).unwrap().split_out().unwrap().1;
+		let out2 = State::from_ptr(&s).split_out().unwrap().1;
 
 		let ptr_list = utils::append(self.ptr_list, utils::list1(out2));
 
@@ -273,19 +301,14 @@ impl Fragment {
 	}
 
 	pub fn optional_repeat(self) -> Self {
-		let s = State::split(self.start, State::null());
+		let s = State::split(self.start, State::none());
 
 		utils::patch(self.ptr_list, &s);
 
-		let mut_s = unsafe {
-			// Get raw pointer to the data
-			let ptr = Rc::as_ptr(s.as_ref().unwrap()) as *mut State;
-			// Dereference the pointer to get a mutable reference
-			&mut *ptr
-		};
+		let state = State::from_ptr(&s);
 
 
-		let out1 = mut_s.split_out1().unwrap();
+		let out1 = state.split_out().unwrap().0;
 
 		let ptr_list = utils::list1(out1);
 
@@ -375,25 +398,26 @@ impl Fragment {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            State::Basic(basic) => write!(f, "Basic({}, {:?})", basic.c, basic.out.as_ref().map(|_| "...")),
+            State::Basic(basic) => write!(f, "{basic}"),
             State::Split(_) => write!(f, "Split({:?}, {:?})", "...", "..."),
             State::NoMatch => write!(f, "NoMatch()"),
             State::Match => write!(f, "Match()"),
+			State::None => write!(f, "None")
         }
     }
 }
 
 impl fmt::Display for BasicState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ c: {}, out: {:?} }}", self.c, self.out.as_ref().map(|_| "..."))
+        write!(f, "{{ c: {}, out: ... }}", self.c)
     }
 }
 
 impl fmt::Display for SplitState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{ out1: {:?}, out2: {:?} }}", 
-            self.out1.as_ref().map(|_| "..."),
-            self.out2.as_ref().map(|_| "...")
+			State::is_none_ptr(&self.out1).then_some("...").unwrap_or("None"),
+			State::is_none_ptr(&self.out2).then_some("...").unwrap_or("None"),
         )
     }
 }
@@ -401,7 +425,7 @@ impl fmt::Display for SplitState {
 impl fmt::Display for Fragment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Fragment {{ start: {:?}, ptr_list: [{}] }}", 
-            self.start.as_ref().map(|_| "..."),
+			State::is_none_ptr(&self.start).then_some("...").unwrap_or("None"),
             self.ptr_list.len()
         )
     }
@@ -410,7 +434,7 @@ impl fmt::Display for Fragment {
 // 4. NFA CONSTRUCTION FUNCTIONS
 // =============================
 
-pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
+pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 	let mut fragments: Vec<Fragment> = vec![];
 
 	while let Some(token) = postfix.pop_front() {
@@ -450,7 +474,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 			},
 
 			c => {
-				let mut s = State::basic(c);
+				let s = State::basic(c);
 
 				let frag = Fragment::char(s);
 
@@ -466,10 +490,11 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 	let e = fragments.pop().unwrap();
 	utils::last_patch(e.ptr_list);
 
-	match e.start {
-		Some(state) => Ok(state),
-		None => Err(ParsingError::unrecognized_rule())
+	if State::is_none_ptr(&e.start) {
+		return Err(ParsingError::unrecognized_rule())
 	}
+
+	Ok(e.start)
 }
 
 // 4. UTILITY FUNCTIONS
@@ -478,30 +503,23 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Rc<State>> {
 pub mod utils {
 	use super::*;
 
-	pub fn last_patch(ptr_list: Vec<*mut StatePtr>) {
+	pub fn last_patch(ptr_list: Vec<StatePtr>) {
 
-		let state = Rc::new(State::Match);
-
-		for ptr in ptr_list {
-			unsafe { *ptr = Some(Rc::clone(&state)) }
-		}
-
+		utils::patch(ptr_list, &Rc::new(State::Match));
 	}
 
-	pub fn patch(ptr_list: Vec<*mut StatePtr>, state: &StatePtr) {
+	pub fn patch(ptr_list: Vec<StatePtr>, state: &Rc<State>) {
 
 		for ptr in ptr_list {
-			let state = state.as_ref().and_then(|rc| Some(Rc::clone(rc)));
-			unsafe { *ptr = state }
+			unsafe { *ptr.get() = Rc::clone(state) }
 		}
-
 	}
 	
-	pub fn list1(endpoint: *mut StatePtr) -> Vec<*mut StatePtr> {
+	pub fn list1(endpoint: StatePtr) -> Vec<StatePtr> {
 		vec![endpoint]
 	}
 
-	pub fn append(mut list1: Vec<*mut StatePtr>, list2: Vec<*mut StatePtr>) -> Vec<*mut StatePtr> {
+	pub fn append(mut list1: Vec<StatePtr>, list2: Vec<StatePtr>) -> Vec<StatePtr> {
 		list1.extend(list2);
 
 		list1

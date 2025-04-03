@@ -11,9 +11,9 @@ pub struct List {
 impl List {
 	pub fn contains(&self, to_find: &Rc<State>) -> bool {
 		self.states.iter()
-			.any(|state| Rc::ptr_eq(to_find, state))
+			.any(|state| Rc::ptr_eq(&to_find, &state))
 	}
-	
+
 	pub fn push(&mut self, value: Rc<State>) {
 			self.states.push(value)
 		}
@@ -30,10 +30,10 @@ impl List {
 		}
 	}
 
-	pub fn from(state: StatePtr) -> Self {
+	pub fn from(state: Rc<State>) -> Self {
 		let mut list = Self::new();
 
-		add_state(state.as_ref(), &mut list);
+		add_state(state, &mut list);
 		
 		list
 	}
@@ -61,18 +61,18 @@ pub fn current_list_id() -> usize {
 }
 
 pub fn input_match(state: StatePtr, input: &str) -> bool {
-	if state.is_none() {
+	if State::is_none_ptr(&state) {
 		return false
 	}
 
 	set_list_id(0);
 
-	let mut current_states = List::from(state);
+	let mut current_states = List::from(State::from_ptr(&state));
 	let mut next_states = List::new();
 
 	let mut chars = input.chars().peekable();
 
-	while let Some(c) = chars.peek() {
+	while let Some(_) = chars.peek() {
 
 		step(&mut chars, &current_states, &mut next_states);
 
@@ -90,7 +90,7 @@ pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mu
 	for state in current_states.iter() {
 		match state.as_ref() {
 			State::Basic(basic) if basic.c.match_(&c) => {
-				add_state(basic.out.as_ref(), next_states);
+				add_state(State::from_ptr(&basic.out), next_states);
 			}
 
 			_ => {},
@@ -98,28 +98,26 @@ pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mu
 	}
 }
 
-pub fn add_state(state: Option<&Rc<State>>, next_states: &mut List) {
-	if state.is_none() {
+pub fn add_state(state: Rc<State>, next_states: &mut List) {
+	if State::is_none(&state) {
 		return;
 	}
 
-	let state = state.unwrap();
-
 	// Already added to next_states
-	if next_states.contains(state) {
+	if next_states.contains(&state) {
 		return ;
 	}
 
 	match state {
-		state if matches!(state.as_ref(), State::Split(_)) => {
-			let split = state.into_split().unwrap();
+		split if matches!(split.as_ref(), State::Split(_)) => {
+			let outs = split.split_out().unwrap();
 
-			add_state(split.out1.as_ref(), next_states);
-			add_state(split.out2.as_ref(), next_states);
+			add_state(State::from_ptr(&outs.0), next_states);
+			add_state(State::from_ptr(&outs.1), next_states);
 		},
 
 		state => {
-			next_states.push(Rc::clone(state));
+			next_states.push(state);
 		},
 	}
 }
