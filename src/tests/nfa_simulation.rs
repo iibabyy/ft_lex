@@ -11,44 +11,31 @@ mod tests {
     use super::*;
 
     // Helper function to create a basic NFA
-    fn create_basic_nfa(c: char) -> StatePtr {
+    fn create_basic_nfa(c: char) -> Nfa {
         let token = TokenType::Literal(RegexType::Char(c));
         post2nfa(VecDeque::from([token])).expect("Failed to build nfa")
     }
 
     // Helper function to create simple patterns
-    fn create_simple_pattern(pattern: &str) -> StatePtr {
-        // This is a simplified version just for testing
-        let mut states = Vec::new();
+    fn create_simple_pattern(pattern: &str) -> Nfa {
+        let mut tokens = VecDeque::new();
         
-        // Create a state for each character
-        for c in pattern.chars() {
-            states.push(create_basic_nfa(c));
+        // Create a token for each character and add concatenation
+        let mut chars = pattern.chars();
+        if let Some(first) = chars.next() {
+            tokens.push_back(TokenType::Literal(RegexType::Char(first)));
+            
+            for c in chars {
+                tokens.push_back(TokenType::Literal(RegexType::Char(c)));
+                tokens.push_back(TokenType::BinaryOperator(RegexType::Concatenation));
+            }
         }
         
-        // Connect the states in sequence
-        for i in 0..states.len() - 1 {
-            let out = states[i].borrow().basic_out().unwrap();
-            *out.borrow_mut() = Rc::clone(&states[i + 1]);
-        }
-        
-        // Add match state at the end
-        if let Some(last) = states.last() {
-            let out = last.borrow().basic_out().unwrap();
-            *out.borrow_mut() = State::match_();
-        }
-        
-        // Return the start state
-        if let Some(first) = states.first() {
-            Rc::clone(first)
-        } else {
-            // Return match state for empty pattern
-            State::match_()
-        }
+        post2nfa(tokens).expect("Failed to build pattern nfa")
     }
 
     // Helper function to create an alternation NFA (a|b)
-    fn create_alt_nfa(a: char, b: char) -> StatePtr {
+    fn create_alt_nfa(a: char, b: char) -> Nfa {
         let tokens = VecDeque::from([
             TokenType::Literal(RegexType::Char(a)),
             TokenType::Literal(RegexType::Char(b)),
@@ -58,7 +45,7 @@ mod tests {
     }
 
     // Helper function to create a repetition NFA (a*)
-    fn create_star_nfa(c: char) -> StatePtr {
+    fn create_star_nfa(c: char) -> Nfa {
         let tokens = VecDeque::from([
             TokenType::Literal(RegexType::Char(c)),
             TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(0))),
@@ -67,7 +54,7 @@ mod tests {
     }
 
     // Helper function to create a plus NFA (a+)
-    fn create_plus_nfa(c: char) -> StatePtr {
+    fn create_plus_nfa(c: char) -> Nfa {
         let tokens = VecDeque::from([
             TokenType::Literal(RegexType::Char(c)),
             TokenType::UnaryOperator(RegexType::Quant(Quantifier::AtLeast(1))),
@@ -136,12 +123,13 @@ mod tests {
         // Create a simple NFA for 'a'
         let nfa = create_basic_nfa('a');
         
-        let mut current_list = List::from(&nfa);
+        let mut current_list = List::from(&nfa.start);
         let mut next_list = List::new();
         
         // Test step with matching character
         let mut chars = "a".chars().peekable();
-        step(&mut chars, &current_list, &mut next_list);
+        let start_of_line = true;
+        step(&mut chars, &current_list, &mut next_list, &nfa, start_of_line);
         
         // The next list should contain the out state
         assert!(!next_list.states.is_empty());
@@ -162,9 +150,10 @@ mod tests {
         assert!(!input_match(&nfa, "abx"));
         
         // Test match state
-        let match_state = State::match_();
-        assert!(input_match(&match_state, ""));
-        assert!(input_match(&match_state, "anything"));
+        let mut match_nfa = Nfa::new();
+        match_nfa.start = State::match_();
+        assert!(input_match(&match_nfa, ""));
+        assert!(input_match(&match_nfa, "anything"));
     }
 
     #[test]
@@ -234,10 +223,11 @@ mod tests {
     #[test]
     fn test_empty_pattern() {
         // Create an empty pattern (just a match state)
-        let match_state = State::match_();
+        let mut match_nfa = Nfa::new();
+        match_nfa.start = State::match_();
         
-        assert!(input_match(&match_state, ""), "Empty pattern should match empty string");
-        assert!(input_match(&match_state, "anything"), "Empty pattern should match any string");
+        assert!(input_match(&match_nfa, ""), "Empty pattern should match empty string");
+        assert!(input_match(&match_nfa, "anything"), "Empty pattern should match any string");
     }
 
     #[test]
@@ -280,14 +270,16 @@ mod tests {
     #[test]
     fn test_edge_cases() {
         // Test none state
-        let none_state = State::none();
-        assert!(!input_match(&none_state, ""), "None state should not match empty string");
-        assert!(!input_match(&none_state, "a"), "None state should not match any string");
+        let mut none_nfa = Nfa::new();
+        none_nfa.start = State::none();
+        assert!(!input_match(&none_nfa, ""), "None state should not match empty string");
+        assert!(!input_match(&none_nfa, "a"), "None state should not match any string");
 
         // Test no_match state
-        let no_match_state = State::no_match();
-        assert!(!input_match(&no_match_state, ""), "No match state should not match empty string");
-        assert!(!input_match(&no_match_state, "a"), "No match state should not match any string");
+        let mut no_match_nfa = Nfa::new();
+        no_match_nfa.start = State::no_match();
+        assert!(!input_match(&no_match_nfa, ""), "No match state should not match empty string");
+        assert!(!input_match(&no_match_nfa, "a"), "No match state should not match any string");
 
         // Test with very long input
         let nfa = create_star_nfa('a');
@@ -299,19 +291,20 @@ mod tests {
     fn test_step_function_edge_cases() {
         // Test step with empty input
         let nfa = create_basic_nfa('a');
-        let mut current_list = List::from(&nfa);
+        let mut current_list = List::from(&nfa.start);
         let mut next_list = List::new();
         let mut chars = "".chars().peekable();
+        let start_of_line = true;
         
-        step(&mut chars, &current_list, &mut next_list);
+        step(&mut chars, &current_list, &mut next_list, &nfa, start_of_line);
         assert!(next_list.states.is_empty(), "Step with empty input should result in empty next list");
 
         // Test step with non-matching character
-        let mut current_list = List::from(&nfa);
+        let mut current_list = List::from(&nfa.start);
         let mut next_list = List::new();
         let mut chars = "b".chars().peekable();
         
-        step(&mut chars, &current_list, &mut next_list);
+        step(&mut chars, &current_list, &mut next_list, &nfa, start_of_line);
         assert!(next_list.states.is_empty(), "Step with non-matching character should result in empty next list");
     }
 }
