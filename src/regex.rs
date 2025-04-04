@@ -1,10 +1,10 @@
-mod re2post;
+pub mod re2post;
 pub use re2post::*;
 
-mod post2nfa;
+pub mod post2nfa;
 pub use post2nfa::*;
 
-mod nfa_simulation;
+pub mod nfa_simulation;
 pub use nfa_simulation::*;
 
 

@@ -1,23 +1,21 @@
-use std::{iter::Peekable, rc::Rc};
+use std::{iter::Peekable, ops::Deref, rc::Rc};
 
 use super::*;
 
-static mut LIST_ID: usize = 0;
-
 pub struct List {
-	pub states: Vec<Rc<State>>,
+	pub states: Vec<StatePtr>,
 }
 
 impl List {
-	pub fn contains(&self, to_find: &Rc<State>) -> bool {
+	pub fn contains(&self, to_find: &StatePtr) -> bool {
 		self.states.iter()
 			.any(|state| Rc::ptr_eq(&to_find, &state))
 	}
 
-	pub fn push(&mut self, value: Rc<State>) {
-			self.states.push(value)
-		}
-		
+	pub fn push(&mut self, value: &StatePtr) {
+		self.states.push(Rc::clone(value))
+	}
+
 	pub fn clear(&mut self) {
 		self.states.clear()
 	}
@@ -30,7 +28,7 @@ impl List {
 		}
 	}
 
-	pub fn from(state: Rc<State>) -> Self {
+	pub fn from(state: &StatePtr) -> Self {
 		let mut list = Self::new();
 
 		add_state(state, &mut list);
@@ -38,36 +36,26 @@ impl List {
 		list
 	}
 	
-	pub fn iter(&self) -> std::slice::Iter<'_, Rc<State>> {
+	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
 		self.states.iter()
 	}
 
 	pub fn is_matched(&self) -> bool {
 		self.states.iter()
-			.any(|state| matches!(state.as_ref(), State::Match))
+			.any(|state| State::is_match_ptr(state))
 	}
 }
 
-pub fn increment_list_id() {
-	unsafe { LIST_ID += 1 }
-}
-
-pub fn set_list_id(id: usize) {
-	unsafe { LIST_ID = id }
-}
-
-pub fn current_list_id() -> usize {
-	unsafe { LIST_ID }
-}
-
-pub fn input_match(state: StatePtr, input: &str) -> bool {
-	if State::is_none_ptr(&state) {
+pub fn input_match(state: &StatePtr, input: &str) -> bool {
+	if State::is_none_ptr(state) {
 		return false
 	}
 
-	set_list_id(0);
+	if State::is_match_ptr(state) {
+		return true
+	}
 
-	let mut current_states = List::from(State::from_ptr(&state));
+	let mut current_states = List::from(state);
 	let mut next_states = List::new();
 
 	let mut chars = input.chars().peekable();
@@ -88,36 +76,35 @@ pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mu
 	next_states.clear();
 
 	for state in current_states.iter() {
-		match state.as_ref() {
-			State::Basic(basic) if basic.c.match_(&c) => {
-				add_state(State::from_ptr(&basic.out), next_states);
-			}
+		if state.borrow().is_basic() == false {
+			return ;
+		}
 
-			_ => {},
+		if state.borrow().into_basic().unwrap().c.match_(&c) {
+			add_state(&state, next_states);
 		}
 	}
 }
 
-pub fn add_state(state: Rc<State>, next_states: &mut List) {
-	if State::is_none(&state) {
-		return;
+pub fn add_state(state: &StatePtr, list: &mut List) {
+	if State::is_none_ptr(&state) {
+		panic!("None ptr");
 	}
 
-	// Already added to next_states
-	if next_states.contains(&state) {
+	// Already added to list
+	if list.contains(&state) {
 		return ;
 	}
 
-	match state {
-		split if matches!(split.as_ref(), State::Split(_)) => {
-			let outs = split.split_out().unwrap();
+	if State::is_split_ptr(&state) {
+		let borrowed_state = state.borrow();
+		let split = borrowed_state.into_split().unwrap();
 
-			add_state(State::from_ptr(&outs.0), next_states);
-			add_state(State::from_ptr(&outs.1), next_states);
-		},
-
-		state => {
-			next_states.push(state);
-		},
+		// out1
+		add_state(&split.out1.borrow(), list);
+		// out2
+		add_state(&split.out2.borrow(), list);
+	} else {
+		list.push(state);
 	}
 }
