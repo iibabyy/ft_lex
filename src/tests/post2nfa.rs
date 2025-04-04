@@ -108,7 +108,6 @@ mod tests {
             RegexType::Char('a'),
             RegexType::Char('b'),
             RegexType::Or,
-            RegexType::QuestionMark
         ]);
         let nfa = post2nfa(tokens);
         assert!(nfa.is_ok());
@@ -133,5 +132,196 @@ mod tests {
         let tokens = create_token_queue(vec![RegexType::Concatenation]);
         let nfa = post2nfa(tokens);
         assert!(nfa.is_err());
+    }
+
+    #[test]
+    fn test_post2nfa_character_classes() {
+        // Test character class [abc]
+        let mut char_class = CharacterClass::new();
+        char_class.add_char('a');
+        char_class.add_char('b');
+        char_class.add_char('c');
+        
+        let tokens = create_token_queue(vec![
+            RegexType::Class(char_class)
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test negated character class [^abc]
+        let mut char_class = CharacterClass::new();
+        char_class.add_char('a');
+        char_class.add_char('b');
+        char_class.add_char('c');
+        let char_class = char_class.negated();
+        
+        let tokens = create_token_queue(vec![
+            RegexType::Class(char_class)
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test character range [a-z]
+        let mut char_class = CharacterClass::new();
+        char_class.add_range('a', 'z');
+        
+        let tokens = create_token_queue(vec![
+            RegexType::Class(char_class)
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+    }
+
+    #[test]
+    fn test_post2nfa_dot() {
+        // Test dot (any character)
+        let tokens = create_token_queue(vec![
+            RegexType::Dot
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+    }
+
+    #[test]
+    fn test_post2nfa_quantifier_edge_cases() {
+        // Test a{0,0} (matches empty string)
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::Range(0, 0))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test a{0,1} (equivalent to a?)
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::Range(0, 1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test a{1,1} (equivalent to just 'a')
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::Exact(1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+    }
+
+    #[test]
+    fn test_post2nfa_complex_nested() {
+        // Test (a(b|c))+
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Char('b'),
+            RegexType::Char('c'),
+            RegexType::Or,
+            RegexType::Concatenation,
+            RegexType::Quant(Quantifier::AtLeast(1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test a|(b|c)
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Char('b'),
+            RegexType::Char('c'),
+            RegexType::Or,
+            RegexType::Or
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+    }
+
+    #[test]
+    fn test_post2nfa_more_errors() {
+        // Test more illegal expressions
+        
+        // Binary operator with only one operand
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Or
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_err());
+        
+        // Unary operator with no operand
+        let tokens = create_token_queue(vec![
+            RegexType::Quant(Quantifier::Range(0, 1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_err());
+        
+        // Nested illegal expression
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Or,
+            RegexType::Concatenation
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_err());
+    }
+
+    #[test]
+    fn test_fragment_operations_advanced() {
+        // Create two fragments
+        let s1 = State::basic(RegexType::Char('a'));
+        let frag1 = Fragment::char(s1);
+        
+        let s2 = State::basic(RegexType::Char('b'));
+        let frag2 = Fragment::char(s2);
+        
+        // Test or operation
+        let or_frag = frag1.deep_clone().or(frag2.deep_clone());
+        
+        // Test and operation with or
+        let s3 = State::basic(RegexType::Char('c'));
+        let frag3 = Fragment::char(s3);
+        
+        let combined = frag3.and(or_frag);
+    }
+
+    #[test]
+    fn test_quantifiers_direct_post2nfa() {
+        // Test a*
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::AtLeast(0))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test a+
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::AtLeast(1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+        
+        // Test a?
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::Range(0, 1))
+        ]);
+        let nfa = post2nfa(tokens);
+        assert!(nfa.is_ok());
+    }
+
+    #[test]
+    fn test_empty_pattern_handling() {
+        // Test handling of an empty pattern through quantifiers
+        let tokens = create_token_queue(vec![
+            RegexType::Char('a'),
+            RegexType::Quant(Quantifier::Range(0, 0))
+        ]);
+        let nfa = post2nfa(tokens).unwrap();
+        
+        // The resulting NFA should effectively be a match state
+        // We can't check this directly, but we can ensure it was created successfully
+        assert!(!State::is_none_ptr(&nfa));
+        assert!(!State::is_nomatch_ptr(&nfa));
     }
 }

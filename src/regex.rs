@@ -23,7 +23,6 @@ pub struct Regex {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegexType {
     Char(char),
-    QuestionMark,
     LineStart,
     LineEnd,
     OpenParenthesis,
@@ -111,7 +110,6 @@ impl fmt::Display for RegexType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RegexType::Char(c) => write!(f, "{}", c),
-            RegexType::QuestionMark => write!(f, "?"),
             RegexType::LineStart => write!(f, "^"),
             RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),
@@ -183,9 +181,8 @@ impl From<RegexType> for TokenType {
             RegexType::CloseParenthesis => TokenType::CloseParenthesis(value),
 
             // One element operator
-            RegexType::Quant(_)
-                | RegexType::QuestionMark => TokenType::UnaryOperator(value),
-            
+            RegexType::Quant(_) => TokenType::UnaryOperator(value),
+
             // Two element operator
             RegexType::Or
                 | RegexType::Concatenation => TokenType::BinaryOperator(value),
@@ -206,7 +203,8 @@ impl From<RegexType> for TokenType {
 impl RegexType {
     pub fn precedence(&self) -> usize {
         match self {
-            RegexType::Quant(_) | RegexType::QuestionMark => 3,
+
+            RegexType::Quant(_) => 3,
 
             RegexType::Concatenation => 2,
 
@@ -225,8 +223,7 @@ impl RegexType {
             RegexType::CloseParenthesis => TokenType::CloseParenthesis(self.clone()),
 
             // One element operator
-            RegexType::Quant(_)
-                | RegexType::QuestionMark => TokenType::UnaryOperator(self.clone()),
+            RegexType::Quant(_) => TokenType::UnaryOperator(self.clone()),
             
             // Two element operator
             RegexType::Or
@@ -257,18 +254,14 @@ impl TokenType {
         match (self, other.type_()) {
             // Literal followed by literal or opening parenthesis
             (TokenType::Literal(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
 
             // Closing parenthesis followed by literal/opening parenthesis
             (TokenType::CloseParenthesis(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
 
             // Unary operator followed by literal/opening parenthesis
             (TokenType::UnaryOperator(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_) | TokenType::StartOrEndCondition(_)) => true,
-
-            // Start/end condition followed by literal/opening parenthesis
-            (TokenType::StartOrEndCondition(_),
                 TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
 
             _ => false
@@ -461,7 +454,7 @@ impl Regex {
 
             '$' => RegexType::LineEnd,
 
-            '?' => RegexType::QuestionMark,
+            '?' => RegexType::Quant(Quantifier::Range(0, 1)),
 
             '|' => RegexType::Or,
 

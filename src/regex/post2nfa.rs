@@ -22,6 +22,8 @@ pub fn var_state_ptr(state: StatePtr) -> VarStatePtr {
 pub enum State {
 	Basic(BasicState),
 	Split(SplitState),
+	EndOfLine(VarStatePtr),
+	StartOfLine(VarStatePtr),
 	NoMatch,
 	Match,
 	None
@@ -77,6 +79,14 @@ impl State {
 
 	pub fn none() -> StatePtr {
 		state_ptr(State::None)
+	}
+
+	pub fn end_of_line(state: StatePtr) -> StatePtr {
+		state_ptr(State::EndOfLine(var_state_ptr(state)))
+	}
+
+	pub fn start_of_line(state: StatePtr) -> StatePtr {
+		state_ptr(State::StartOfLine(var_state_ptr(state)))
 	}
 
 	pub fn is_none(&self) -> bool {
@@ -244,6 +254,22 @@ impl State {
 				(state, ptr_list1)
 			},
 
+			State::EndOfLine(var_ptr) => {
+				let (new_inner_state, ptr_list) = State::deref_var_ptr(var_ptr).borrow().self_ptr_deep_clone();
+
+				let cloned_state = State::end_of_line(new_inner_state);
+
+				(cloned_state, ptr_list)
+			},
+
+			State::StartOfLine(var_ptr) => {
+				let (new_inner_state, ptr_list) = State::deref_var_ptr(var_ptr).borrow().self_ptr_deep_clone();
+
+				let cloned_state = State::start_of_line(new_inner_state);
+
+				(cloned_state, ptr_list)
+			},
+
 			State::Match => {
 				(State::match_(), vec![])
 			},
@@ -296,7 +322,7 @@ impl Fragment {
 	}
 
 	pub fn and(self, e2: Self) -> Self {
-		utils::patch(self.ptr_list, &e2.start);
+		utils::patch(&self.ptr_list, &e2.start);
 
 		Fragment::new(self.start, e2.ptr_list)
 	}
@@ -320,7 +346,7 @@ impl Fragment {
 	pub fn optional_repeat(self) -> Self {
 		let s = State::split(self.start, State::none());
 
-		utils::patch(self.ptr_list, &s);
+		utils::patch(&self.ptr_list, &s);
 
 		let none_out = s.borrow().split_out().unwrap().1;
 
@@ -334,11 +360,11 @@ impl Fragment {
 		let n = *n;
 
 		if n == 0 {
-			utils::patch(fragment.ptr_list, &State::no_match());
+			utils::patch(&fragment.ptr_list, &State::no_match());
 
 			return Fragment::new(fragment.start, vec![])
 		}
-		
+
 		for _ in 1..n {
 			let cloned_fragment = fragment.deep_clone();
 
@@ -349,7 +375,11 @@ impl Fragment {
 	}
 
 	pub fn at_least(self, n: &usize) -> Self {
-		let fragment = self.exact_repeat(n);
+		let fragment = if n > &0 {
+			self.exact_repeat(n)
+		} else {
+			self
+		};
 
 		fragment.optional_repeat()
 	}
@@ -370,6 +400,8 @@ impl Fragment {
 			optional_part = optional_part.optional();
 			
 			fragment.and(optional_part)
+		} else if optional_count == 0 {
+			return self.exact_repeat(at_least);
 		} else {
 			panic!("Invalid Range parameter")
 		}
@@ -411,11 +443,23 @@ impl Fragment {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            State::Basic(basic) => write!(f, "{basic}"),
-            State::Split(_) => write!(f, "Split({:?}, {:?})", "...", "..."),
-            State::NoMatch => write!(f, "NoMatch()"),
-            State::Match => write!(f, "Match()"),
-			State::None => write!(f, "None")
+            State::Basic(basic) => write!(f, "{}", basic.out.borrow().borrow().is_none().then_some("...").unwrap_or("None")),
+            
+			State::NoMatch => write!(f, "NoMatch()"),
+            
+			State::Match => write!(f, "Match()"),
+			
+			State::None => write!(f, "None"),
+            
+			State::Split(split) => write!(f,
+				"Split({:?}, {:?})",
+				split.out1.borrow().borrow().is_none().then_some("...").unwrap_or("None"), 
+				split.out1.borrow().borrow().is_none().then_some("...").unwrap_or("None")
+			),
+
+			State::EndOfLine(state) => write!(f, "EndOfLine ({:?})", state.borrow().borrow().is_none().then_some("...").unwrap_or("None")),
+
+			State::StartOfLine(state) => write!(f, "EndOfLine ({:?})", state.borrow().borrow().is_none().then_some("...").unwrap_or("None")),
         }
     }
 }
@@ -452,6 +496,10 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 
 	while let Some(token) = postfix.pop_front() {
 		match token.into_owned_inner() {
+			RegexType::LineEnd => {
+				// let e = fragments.pop()
+				todo!()
+			}
 			RegexType::Concatenation => {
 				let e2 = fragments.pop()
 					.ok_or(ParsingError::unrecognized_rule())?;
@@ -470,13 +518,6 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 					.ok_or(ParsingError::unrecognized_rule().because("Unexpected '|'"))?;
 
 				fragments.push(e1.or(e2));
-			},
-
-			RegexType::QuestionMark => {
-				let e = fragments.pop()
-					.ok_or(ParsingError::unrecognized_rule().because("Unexpected '?'"))?;
-
-				fragments.push(e.optional());
 			},
 
 			RegexType::Quant(quantifier) => {
@@ -501,7 +542,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 	}
 
 	let e = fragments.pop().unwrap();
-	utils::last_patch(e.ptr_list);
+	utils::last_patch(&e.ptr_list);
 
 	if State::is_none_ptr(&e.start) {
 		return Err(ParsingError::unrecognized_rule())
@@ -516,12 +557,12 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 pub mod utils {
 	use super::*;
 
-	pub fn last_patch(ptr_list: Vec<VarStatePtr>) {
+	pub fn last_patch(ptr_list: &Vec<VarStatePtr>) {
 
 		utils::patch(ptr_list, &State::match_());
 	}
 
-	pub fn patch(ptr_list: Vec<VarStatePtr>, state: &StatePtr) {
+	pub fn patch(ptr_list: &Vec<VarStatePtr>, state: &StatePtr) {
 
 		for ptr in ptr_list {
 			ptr.replace(Rc::clone(state));

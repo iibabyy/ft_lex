@@ -2,6 +2,7 @@ use std::{iter::Peekable, ops::Deref, rc::Rc};
 
 use super::*;
 
+#[derive(Debug)]
 pub struct List {
 	pub states: Vec<StatePtr>,
 }
@@ -71,6 +72,10 @@ pub fn input_match(state: &StatePtr, input: &str) -> bool {
 }
 
 pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mut List) {
+	if chars.peek().is_none() {
+		return ;
+	}
+
 	let c = chars.next().unwrap();
 
 	next_states.clear();
@@ -81,7 +86,7 @@ pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mu
 		}
 
 		if state.borrow().into_basic().unwrap().c.match_(&c) {
-			add_state(&state, next_states);
+			add_state(&State::deref_var_ptr(&state.borrow().basic_out().unwrap()), next_states);
 		}
 	}
 }
