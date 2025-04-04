@@ -22,8 +22,6 @@ pub fn var_state_ptr(state: StatePtr) -> VarStatePtr {
 pub enum State {
 	Basic(BasicState),
 	Split(SplitState),
-	EndOfLine(VarStatePtr),
-	StartOfLine(VarStatePtr),
 	NoMatch,
 	Match,
 	None
@@ -79,14 +77,6 @@ impl State {
 
 	pub fn none() -> StatePtr {
 		state_ptr(State::None)
-	}
-
-	pub fn end_of_line(state: StatePtr) -> StatePtr {
-		state_ptr(State::EndOfLine(var_state_ptr(state)))
-	}
-
-	pub fn start_of_line(state: StatePtr) -> StatePtr {
-		state_ptr(State::StartOfLine(var_state_ptr(state)))
 	}
 
 	pub fn is_none(&self) -> bool {
@@ -254,22 +244,6 @@ impl State {
 				(state, ptr_list1)
 			},
 
-			State::EndOfLine(var_ptr) => {
-				let (new_inner_state, ptr_list) = State::deref_var_ptr(var_ptr).borrow().self_ptr_deep_clone();
-
-				let cloned_state = State::end_of_line(new_inner_state);
-
-				(cloned_state, ptr_list)
-			},
-
-			State::StartOfLine(var_ptr) => {
-				let (new_inner_state, ptr_list) = State::deref_var_ptr(var_ptr).borrow().self_ptr_deep_clone();
-
-				let cloned_state = State::start_of_line(new_inner_state);
-
-				(cloned_state, ptr_list)
-			},
-
 			State::Match => {
 				(State::match_(), vec![])
 			},
@@ -310,7 +284,7 @@ impl Fragment {
 		}
 	}
 
-	pub fn char(start: StatePtr) -> Self {
+	pub fn basic(start: StatePtr) -> Self {
 		let ptr = start.borrow().basic_out().unwrap();
 
 		let frag = Fragment {
@@ -437,6 +411,19 @@ impl Fragment {
 	}
 }
 
+pub struct Nfa {
+	start: StatePtr,
+
+	end_of_line: bool,
+	start_of_line: bool,
+}
+
+impl Nfa {
+	pub fn new() -> Self {
+		Nfa { start: State::none(), end_of_line: false, start_of_line: false }
+	}
+}
+
 // 3. DISPLAY IMPLEMENTATIONS
 // =========================
 
@@ -456,10 +443,6 @@ impl fmt::Display for State {
 				split.out1.borrow().borrow().is_none().then_some("...").unwrap_or("None"), 
 				split.out1.borrow().borrow().is_none().then_some("...").unwrap_or("None")
 			),
-
-			State::EndOfLine(state) => write!(f, "EndOfLine ({:?})", state.borrow().borrow().is_none().then_some("...").unwrap_or("None")),
-
-			State::StartOfLine(state) => write!(f, "EndOfLine ({:?})", state.borrow().borrow().is_none().then_some("...").unwrap_or("None")),
         }
     }
 }
@@ -492,14 +475,12 @@ impl fmt::Display for Fragment {
 // =============================
 
 pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
+	let mut nfa = Nfa::new();
 	let mut fragments: Vec<Fragment> = vec![];
 
 	while let Some(token) = postfix.pop_front() {
 		match token.into_owned_inner() {
-			RegexType::LineEnd => {
-				// let e = fragments.pop()
-				todo!()
-			}
+
 			RegexType::Concatenation => {
 				let e2 = fragments.pop()
 					.ok_or(ParsingError::unrecognized_rule())?;
@@ -527,10 +508,26 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 				fragments.push(e.quantify(&quantifier));
 			},
 
+			RegexType::LineEnd => {
+				if nfa.end_of_line == true || fragments.last().is_none() {
+					return Err(ParsingError::unrecognized_rule().because("unexpected '^' special character"))
+				}
+
+				nfa.end_of_line = true;
+			}
+
+			RegexType::LineStart => {
+				if nfa.start_of_line == true || fragments.last().is_some() {
+					return Err(ParsingError::unrecognized_rule().because("unexpected '^' special character"))
+				}
+
+				nfa.start_of_line = true;
+			}
+
 			c => {
 				let s = State::basic(c);
 
-				let frag = Fragment::char(s);
+				let frag = Fragment::basic(s);
 
 				fragments.push(frag);
 			}

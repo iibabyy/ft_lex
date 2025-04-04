@@ -42,14 +42,14 @@ mod tests {
     fn test_fragment_operations() {
         // Test fragment creation
         let s = State::basic(RegexType::Char('a'));
-        let frag = Fragment::char(s);
+        let frag = Fragment::basic(s);
         
         // Test deep clone
         let cloned = frag.deep_clone();
         
         // Test concatenation (and)
         let s2 = State::basic(RegexType::Char('b'));
-        let frag2 = Fragment::char(s2);
+        let frag2 = Fragment::basic(s2);
         let concat = frag.and(frag2);
         
         // We can't easily check the structure, but we can verify it doesn't panic
@@ -59,7 +59,7 @@ mod tests {
     fn test_fragment_quantifiers() {
         // Test optional fragment
         let s = State::basic(RegexType::Char('a'));
-        let frag = Fragment::char(s);
+        let frag = Fragment::basic(s);
         let optional = frag.deep_clone().optional();
         
         // Test repeat
@@ -268,17 +268,17 @@ mod tests {
     fn test_fragment_operations_advanced() {
         // Create two fragments
         let s1 = State::basic(RegexType::Char('a'));
-        let frag1 = Fragment::char(s1);
+        let frag1 = Fragment::basic(s1);
         
         let s2 = State::basic(RegexType::Char('b'));
-        let frag2 = Fragment::char(s2);
+        let frag2 = Fragment::basic(s2);
         
         // Test or operation
         let or_frag = frag1.deep_clone().or(frag2.deep_clone());
         
         // Test and operation with or
         let s3 = State::basic(RegexType::Char('c'));
-        let frag3 = Fragment::char(s3);
+        let frag3 = Fragment::basic(s3);
         
         let combined = frag3.and(or_frag);
     }
