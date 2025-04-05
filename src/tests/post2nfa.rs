@@ -80,7 +80,7 @@ mod tests {
         // Test simple character
         let tokens = create_token_queue(vec![RegexType::Char('a')]);
         let nfa = post2nfa(tokens).unwrap();
-        assert!(State::is_basic_ptr(&nfa));
+        assert!(State::is_basic_ptr(&nfa.start));
         
         // Test concatenation
         let tokens = create_token_queue(vec![
@@ -321,7 +321,7 @@ mod tests {
         
         // The resulting NFA should effectively be a match state
         // We can't check this directly, but we can ensure it was created successfully
-        assert!(!State::is_none_ptr(&nfa));
-        assert!(!State::is_nomatch_ptr(&nfa));
+        assert!(!State::is_none_ptr(&nfa.start));
+        assert!(!State::is_nomatch_ptr(&nfa.start));
     }
 }

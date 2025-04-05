@@ -20,6 +20,10 @@ impl List {
 	pub fn clear(&mut self) {
 		self.states.clear()
 	}
+	
+	pub fn len(&self) -> usize {
+		self.states.len()
+	}
 }
 
 impl List {
@@ -47,48 +51,109 @@ impl List {
 	}
 }
 
-pub fn input_match(state: &StatePtr, input: &str) -> bool {
-	if State::is_none_ptr(state) {
-		return false
-	}
+pub struct NfaSimulation<'a> {
+	current_states: List,
+	next_states: List,
 
-	if State::is_match_ptr(state) {
-		return true
-	}
+	on_start_of_line: bool,
+	on_end_of_line: bool,
 
-	let mut current_states = List::from(state);
-	let mut next_states = List::new();
+	input: &'a str,
+	chars: Peekable<Chars<'a>>,
 
-	let mut chars = input.chars().peekable();
-
-	while let Some(_) = chars.peek() {
-
-		step(&mut chars, &current_states, &mut next_states);
-
-		std::mem::swap(&mut current_states, &mut next_states);
-	}
-
-	current_states.is_matched()
+	nfa: &'a Nfa
 }
 
-pub fn step(chars: &mut Peekable<Chars>, current_states: &List, next_states: &mut List) {
-	if chars.peek().is_none() {
-		return ;
+impl<'a> NfaSimulation<'a> {
+	pub fn new(input: &'a str, nfa: &'a Nfa) -> Self {
+		let current_states = List::from(&nfa.start);
+		let next_states = List::new();
+
+		let on_start_of_line = true;
+		let on_end_of_line = true;
+
+		let chars = input.chars().peekable();
+
+		NfaSimulation {
+			current_states,
+			next_states,
+			on_start_of_line,
+			on_end_of_line,
+			input,
+			chars,
+			nfa
+		}
 	}
 
-	let c = chars.next().unwrap();
+	pub fn peek(&mut self) -> Option<&char> {
+		self.chars.peek()
+	}
 
-	next_states.clear();
+	pub fn has_input_left(&mut self) -> bool {
+		self.peek().is_some()
+	}
 
-	for state in current_states.iter() {
-		if state.borrow().is_basic() == false {
+	pub fn next(&mut self) -> Option<char> {
+		self.chars.next()
+	}
+
+	pub fn is_end_of_line(&mut self) -> bool {
+		self.peek() == Some(&'\n')
+	}
+
+	pub fn step(&mut self) {
+		if self.has_input_left() == false {
 			return ;
 		}
 
-		if state.borrow().into_basic().unwrap().c.match_(&c) {
-			add_state(&State::deref_var_ptr(&state.borrow().basic_out().unwrap()), next_states);
+		let c = self.next().unwrap();
+
+		self.next_states.clear();
+
+
+		if self.nfa.start.borrow().matche_with(&c) {
+			if self.nfa.start_of_line == false || self.on_start_of_line == true {
+				add_state(&self.nfa.start, &mut self.next_states);
+			}
 		}
+
+
+		for state in self.current_states.iter() {
+			if state.borrow().is_basic() == false {
+				return ;
+			}
+
+			if  state.borrow().into_basic().unwrap().c.match_(&c) {
+				add_state(&State::deref_var_ptr(&state.borrow().basic_out().unwrap()), &mut self.next_states);
+			}
+		}
+
+		std::mem::swap(&mut self.current_states, &mut self.next_states);
+
+		self.on_start_of_line = false;
 	}
+}
+
+pub fn input_match(nfa: &Nfa, input: &str) -> bool {
+	let mut simulation = NfaSimulation::new(input, nfa);
+
+	if State::is_none_ptr(&nfa.start) {
+		return false
+	}
+
+	if State::is_match_ptr(&nfa.start) {
+		return true
+	}
+
+	while simulation.has_input_left() {
+		simulation.step();
+	}
+
+	if nfa.end_of_line == true && simulation.chars.peek().is_some() {
+		return false;
+	}
+
+	simulation.current_states.is_matched()
 }
 
 pub fn add_state(state: &StatePtr, list: &mut List) {

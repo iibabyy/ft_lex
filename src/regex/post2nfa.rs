@@ -308,9 +308,9 @@ impl Fragment {
 	}
 
 	pub fn optional(self) -> Self {
-		let s = State::split(self.start, State::none());
+		let s = State::split(State::none(), self.start);
 
-		let none_out = s.borrow().split_out().unwrap().1;
+		let none_out = s.borrow().split_out().unwrap().0;
 
 		let ptr_list = utils::append(self.ptr_list, utils::list1(none_out));
 
@@ -318,11 +318,11 @@ impl Fragment {
 	}
 
 	pub fn optional_repeat(self) -> Self {
-		let s = State::split(self.start, State::none());
+		let s = State::split(State::none(), self.start);
 
 		utils::patch(&self.ptr_list, &s);
 
-		let none_out = s.borrow().split_out().unwrap().1;
+		let none_out = s.borrow().split_out().unwrap().0;
 
 		let ptr_list = utils::list1(none_out);
 
@@ -349,13 +349,16 @@ impl Fragment {
 	}
 
 	pub fn at_least(self, n: &usize) -> Self {
-		let fragment = if n > &0 {
-			self.exact_repeat(n)
-		} else {
-			self
-		};
+		if n > &0 {
+			let clone = self.deep_clone();
 
-		fragment.optional_repeat()
+			let repeat = self.exact_repeat(n);
+			let optional = clone.optional_repeat();
+
+			repeat.and(optional)
+		} else {
+			self.optional_repeat()
+		}
 	}
 
 	pub fn range(self, at_least: &usize, at_most: &usize) -> Self {
@@ -412,10 +415,10 @@ impl Fragment {
 }
 
 pub struct Nfa {
-	start: StatePtr,
+	pub start: StatePtr,
 
-	end_of_line: bool,
-	start_of_line: bool,
+	pub end_of_line: bool,
+	pub start_of_line: bool,
 }
 
 impl Nfa {
@@ -474,7 +477,7 @@ impl fmt::Display for Fragment {
 // 4. NFA CONSTRUCTION FUNCTIONS
 // =============================
 
-pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
+pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
 	let mut nfa = Nfa::new();
 	let mut fragments: Vec<Fragment> = vec![];
 
@@ -545,7 +548,9 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 		return Err(ParsingError::unrecognized_rule())
 	}
 
-	Ok(e.start)
+	nfa.start = e.start;
+
+	Ok(nfa)
 }
 
 // 4. UTILITY FUNCTIONS
