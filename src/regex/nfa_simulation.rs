@@ -36,7 +36,7 @@ impl List {
 		
 		list
 	}
-	
+
 	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
 		self.states.iter()
 	}

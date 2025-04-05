@@ -510,7 +510,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 
 			RegexType::LineEnd => {
 				if nfa.end_of_line == true || fragments.last().is_none() {
-					return Err(ParsingError::unrecognized_rule().because("unexpected '^' special character"))
+					return Err(ParsingError::unrecognized_rule().because("unexpected '$' special character"))
 				}
 
 				nfa.end_of_line = true;
