@@ -15,36 +15,6 @@ fn pattern_to_nfa(pattern: &str) -> ParsingResult<Nfa> {
 	post2nfa(postfix)
 }
 
-// pub fn input_match(nfa: &Nfa, input: &str) -> bool {
-//     let mut simulation = NfaSimulation::new(nfa);
-
-// 	let mut chars = input.chars().peekable();
-
-// 	let start_of_line = true;
-
-// 	simulation.start(start_of_line);
-
-// 	// Check if the next states have a match
-// 	if simulation.current_states.is_matched() {
-// 		return simulation.nfa.end_of_line == false || input.is_empty();
-// 	}	
-
-// 	while let Some(c) = chars.next() {
-// 		let peek = chars.peek();
-// 		// check if the next character is the end of a line
-// 		let end_of_line = peek == None || peek == Some(&'\n');
-
-// 		match simulation.step(&c, end_of_line) {
-// 			NfaStatus::Pending => continue,
-
-// 			// finished
-// 			_ => break,
-// 		}
-// 	}
-
-// 	simulation.longest_match.is_some()
-// }
-
 // Helper function to run NFA simulation that returns the longest match
 fn run_simulation(nfa: &Nfa, input: &str, at_start_of_line: bool) -> Option<usize> {
     let mut simulation = NfaSimulation::new(nfa);
