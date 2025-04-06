@@ -3,6 +3,7 @@ use std::{
     fmt,
     ops::{Deref, DerefMut},
     rc::{Rc, Weak},
+    collections::HashMap,
 };
 
 use super::*;
@@ -217,34 +218,55 @@ impl State {
 
     /// Needed for reusing the same fragment (e.g repeting a fragment)
     fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<VarStatePtr>) {
+        Self::self_ptr_deep_clone_with_memo(self, &mut HashMap::new())
+    }
+    
+    fn self_ptr_deep_clone_with_memo(
+        &self, 
+        memo: &mut HashMap<*const State, StatePtr>
+    ) -> (StatePtr, Vec<VarStatePtr>) {
+        // Get raw pointer for use as HashMap key
+        let self_ptr = self as *const State;
+        
+        // If we've already cloned this state, return the cached clone
+        if let Some(cached_clone) = memo.get(&self_ptr) {
+            return (Rc::clone(cached_clone), vec![]);
+        }
+        
         match self {
             State::Basic(basic) => {
                 let cloned_regex = basic.c.clone();
-
-                let (cloned_out, cloned_ptr_list) = Self::deep_clone(&basic.out.borrow());
-                let cloned_out_is_some = State::is_none_ptr(&cloned_out) == false;
-
+                
+                // Create empty state first so we can insert it into the memo table
                 let state = state_ptr(State::Basic(BasicState {
-                    c: cloned_regex,
-                    out: var_state_ptr(cloned_out),
+                    c: cloned_regex.clone(),
+                    out: var_state_ptr(State::none()),
                 }));
-
-                let ptr_list = if cloned_out_is_some {
-                    cloned_ptr_list
+                
+                // Insert the new state into memo table before recursing
+                memo.insert(self_ptr, Rc::clone(&state));
+                
+                // Now safely recursively clone the out state
+                let out_ref = &basic.out.borrow();
+                if !State::is_none_ptr(out_ref) {
+                    let (cloned_out, cloned_ptr_list) = 
+                        Self::deep_clone_with_memo(out_ref, memo);
+                    
+                    // Update the out pointer
+                    state.borrow_mut().into_basic().unwrap().out.replace(cloned_out);
+                    
+                    return (state, cloned_ptr_list);
                 } else {
                     let ptr = state.borrow().basic_out().unwrap();
-
-                    vec![ptr]
-                };
-
-                (state, ptr_list)
+                    return (state, vec![ptr]);
+                }
             }
 
             State::Split(split) => {
-                let (cloned_out1, cloned_ptr_list1) = Self::deep_clone(&split.out1.borrow());
+                let (cloned_out1, cloned_ptr_list1) = Self::deep_clone_with_memo(&split.out1.borrow(), memo);
                 let cloned_1_is_some = State::is_none_ptr(&cloned_out1);
 
-                let (cloned_out2, cloned_ptr_list2) = Self::deep_clone(&split.out2.borrow());
+                let (cloned_out2, cloned_ptr_list2) = Self::deep_clone_with_memo(&split.out2.borrow(), memo);
                 let cloned_2_is_some = State::is_none_ptr(&cloned_out2);
 
                 let state = State::split(cloned_out1, cloned_out2);
@@ -279,11 +301,19 @@ impl State {
     }
 
     pub fn deep_clone(state: &StatePtr) -> (StatePtr, Vec<VarStatePtr>) {
+        Self::deep_clone_with_memo(state, &mut HashMap::new())
+    }
+    
+    fn deep_clone_with_memo(
+        state: &StatePtr, 
+        memo: &mut HashMap<*const State, StatePtr>
+    ) -> (StatePtr, Vec<VarStatePtr>) {
         if State::is_none_ptr(state) {
             return (State::none(), vec![]);
         }
-
-        State::from_ptr(state).self_ptr_deep_clone()
+        
+        let state_ref = state.borrow();
+        state_ref.self_ptr_deep_clone_with_memo(memo)
     }
 
     pub fn matche_with(&self, c: &char) -> bool {
@@ -335,6 +365,7 @@ impl Fragment {
 
         Fragment::new(s, ptr_list)
     }
+
     /// Implements the Kleene star (*) operation, which matches zero or more repetitions of the pattern.
     /// Unlike optional(), which matches 0 or 1 occurrence, this allows unlimited repetitions.
     /// This creates a split state that can either skip the pattern (matching 0 times) or
@@ -382,7 +413,7 @@ impl Fragment {
             let repeat = self.exact_repeat(n);
             let optional = clone.optional_repeat();
 
-            repeat.and(optional)
+			repeat.and(optional)
         } else {
             self.optional_repeat()
         }
@@ -392,7 +423,11 @@ impl Fragment {
         let optional_count = at_most - at_least;
 
         if optional_count > 0 {
-            let fragment = self.deep_clone().exact_repeat(at_least);
+            let fragment = if at_least > &0 {
+                self.deep_clone().exact_repeat(at_least)
+            } else {
+                self.deep_clone().optional()
+            };
 
             let mut optional_part = self.deep_clone();
 
@@ -553,6 +588,10 @@ impl fmt::Display for Fragment {
 
 /// This function implements Thompson's construction algorithm to convert the postfix regex to an NFA
 pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
+	if postfix.is_empty() {
+		return Err(ParsingError::unrecognized_rule());
+	}
+
     let mut nfa = Nfa::new();
     let mut fragments: Vec<Fragment> = vec![];
 
@@ -583,8 +622,8 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
                     .pop()
                     .ok_or(ParsingError::unrecognized_rule().because("Unexpected '?'"))?;
 
-                fragments.push(e.quantify(&quantifier));
-            }
+				fragments.push(e.quantify(&quantifier));
+			}
 
             RegexType::LineEnd => {
                 if nfa.end_of_line == true || fragments.last().is_none() {
@@ -627,7 +666,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
 
     nfa.start = e.start;
 
-    Ok(nfa)
+	Ok(nfa)
 }
 
 // 4. UTILITY FUNCTIONS

@@ -1,4 +1,4 @@
-use std::{iter::Peekable, ops::Deref, rc::Rc};
+use std::{iter::Peekable, ops::Deref, rc::Rc, collections::HashSet};
 
 use super::*;
 // ===================================
@@ -17,32 +17,36 @@ impl StateList {
 	}
 
 	pub fn from(state: &StatePtr) -> Self {
-		let state = Rc::clone(state);
+		let mut list = StateList::new();
 
-		StateList {
-			states: Vec::from([state])
-		}
+		list.add_state(state);
+
+		list
 	}
 
     pub fn add_state(&mut self, state: &StatePtr) {
-        if State::is_none_ptr(&state) {
-            panic!("None ptr");
-        }
+        self.add_state_with_memo(state, &mut HashSet::new());
+    }
 
-        // Already added to list
-        if self.contains(&state) {
+    fn add_state_with_memo(&mut self, state: &StatePtr, visited: &mut HashSet<*const State>) {
+        let state_ptr = state.borrow().deref() as *const State;
+
+        if visited.insert(state_ptr) == false {
             return;
         }
 
-        // Don't directly add split states, add their out states instead
-        if State::is_split_ptr(&state) {
+        if self.contains(state) {
+            return;
+        }
+
+		if State::is_split_ptr(&state) {
             let borrowed_state = state.borrow();
             let split = borrowed_state.into_split().unwrap();
 
             // out1
-            self.add_state(&split.out1.borrow());
+            self.add_state_with_memo(&split.out1.borrow(), visited);
             // out2
-            self.add_state(&split.out2.borrow());
+            self.add_state_with_memo(&split.out2.borrow(), visited);
         } else {
             self.push(state);
         }
@@ -157,6 +161,10 @@ impl<'a> NfaSimulation<'a> {
 	pub fn check_start_of_line(&self) -> bool {
 		self.nfa.start_of_line == false || self.start_of_line == true
 	}
+	/// Check if the end of line matches the NFA's end of line condition
+	pub fn check_end_of_line(&self, end_of_line: bool) -> bool {
+		self.nfa.end_of_line == false || end_of_line == true
+	}
 
 	pub fn status(&self) -> NfaStatus {
 		if self.check_start_of_line() == false {
@@ -206,7 +214,7 @@ impl<'a> NfaSimulation<'a> {
 
 		// Check if the next states have a match
 		if self.next_states.is_matched() {
-			if self.nfa.end_of_line == end_of_line {
+			if self.check_end_of_line(end_of_line) {
 				self.longest_match = Some(self.readed);
 			}
 			self.next_states.remove_matchs();
@@ -214,7 +222,6 @@ impl<'a> NfaSimulation<'a> {
 		
 		// remove the matchs, to only keep active states in the next states
 		self.switch_to_next_states();
-		
 		return self.status()
 	}
 
@@ -222,13 +229,14 @@ impl<'a> NfaSimulation<'a> {
 		self.readed = 0;
 		self.longest_match = None;
 		self.current_states.clear();
+		self.current_states.add_state(&self.nfa.start);
 		self.next_states.clear();
 		self.start_of_line = start_of_line;
 	}
 }
 
 /// Implements a traditional NFA simulation where we track all possible states simultaneously. \
-/// The algorithm maintains two sets of states (current_states and next_states) and follows all possible
+/// The algorithm maintains two SETS of states (current_states and next_states) and follows all possible
 /// paths through the NFA in parallel. This approach handles nondeterminism by exploring all possible
 /// transitions for each input character, which is the defining characteristic of Thompson's NFA simulation.
 pub fn input_match(nfa: &Nfa, input: &str) -> bool {

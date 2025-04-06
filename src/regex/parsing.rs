@@ -151,7 +151,10 @@ impl TokenType {
     pub fn need_concatenation_with(&self, other: &RegexType) -> bool {
         match (self, other.type_()) {
             // Literal followed by literal or opening parenthesis
-            (TokenType::Literal(_), TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
+            (
+				TokenType::Literal(_),
+				TokenType::Literal(_) | TokenType::OpenParenthesis(_)
+			) => true,
 
             // Closing parenthesis followed by literal/opening parenthesis
             (
