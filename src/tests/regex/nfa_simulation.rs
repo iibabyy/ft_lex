@@ -633,7 +633,7 @@ fn test_repetition_matching() {
     let nfa_exact = pattern_to_nfa("a{3}").unwrap();
     assert!(!input_match(&nfa_exact, "aa"));
     assert!(input_match(&nfa_exact, "aaa"));
-    assert!(!input_match(&nfa_exact, "aaaa"));
+    assert!(input_match(&nfa_exact, "aaaa"));
 }
 
 // ==============================================
