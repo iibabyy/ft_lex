@@ -169,16 +169,19 @@ impl Definitions {
     }
 
     /// Parses the definitions section of a lexer file.
-    /// 
+    ///
     /// This function handles all types of definitions:
     /// - Table size declarations (%p, %n, etc.)
     /// - Name substitutions
     /// - Program fragments (inline and block)
     /// - Type declarations (%array, %pointer)
     /// - State declarations (%s, %x)
-    /// 
+    ///
     /// Returns an error if any definition is invalid or if the section delimiter is missing.
-    pub fn parse<'de, R: Read>(&'de mut self, reader: &mut Reader<R>) -> ParsingResult<&'de mut Self> {
+    pub fn parse<'de, R: Read>(
+        &'de mut self,
+        reader: &mut Reader<R>,
+    ) -> ParsingResult<&'de mut Self> {
         loop {
             match Self::line_type(reader)? {
                 DefinitionType::TableSize(table, size) => {
@@ -199,9 +202,12 @@ impl Definitions {
                 }
                 DefinitionType::StateDeclaration(state_type, states_names) => {
                     for name in states_names {
-                        if let Some(_)= self.states.insert(name.clone(), state_type) {
+                        if let Some(_) = self.states.insert(name.clone(), state_type) {
                             // Duplicate Value
-							return Err(ParsingError::syntax(format!("start condition {} declared twice", name)));
+                            return Err(ParsingError::syntax(format!(
+                                "start condition {} declared twice",
+                                name
+                            )));
                         }
                     }
                 }
@@ -224,7 +230,7 @@ impl Definitions {
     }
 
     /// Determines the type of definition from a line of input.
-    /// 
+    ///
     /// This function handles all possible definition formats:
     /// - Lines starting with space: inline program fragments
     /// - Lines starting with name: substitutions
@@ -232,9 +238,7 @@ impl Definitions {
     /// - Empty lines
     /// - Section delimiter
     fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
-        let line = reader
-            .line()?
-            .ok_or(ParsingError::end_of_file())?;
+        let line = reader.line()?.ok_or(ParsingError::end_of_file())?;
 
         if line.is_empty() {
             return Ok(DefinitionType::Empty);
@@ -263,7 +267,8 @@ impl Definitions {
 
             // Validate that the name follows C naming conventions
             if !Utils::is_iso_C_normed(split.0) {
-                return Err(ParsingError::syntax(format!("`{}`", split.0)).because("name must be iso-C normed"));
+                return Err(ParsingError::syntax(format!("`{}`", split.0))
+                    .because("name must be iso-C normed"));
             }
 
             return Ok(DefinitionType::Substitute(
@@ -276,27 +281,27 @@ impl Definitions {
         // Format: %{ ... %}
         if line.starts_with("%{") {
             let open_dilimiter_index = reader.index();
-            
+
             // Read all lines until closing delimiter %}
             let (content, found) = Utils::read_until_line("%}", reader)?;
-			
+
             // Check if the closing delimiter was found or if we reached EOF
             if !found {
-				return Err(ParsingError::end_of_file()
+                return Err(ParsingError::end_of_file()
                     .because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
                 );
             }
-			
+
             // Join the lines with newlines and add extra newlines at start and end
             // This ensures proper separation in the generated code
             let mut content = content.join("\n");
             content.insert(0, '\n');
             content.push('\n');
 
-			// If something after %{, insert it at the beginning
-			if line.len() > 2 {
-				content.insert_str(0, &line[2..]);
-			}
+            // If something after %{, insert it at the beginning
+            if line.len() > 2 {
+                content.insert_str(0, &line[2..]);
+            }
 
             return Ok(DefinitionType::Fragment(content));
         }
@@ -323,25 +328,25 @@ impl Definitions {
             // State declarations (%s for inclusive, %x for exclusive)
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
-                    return Err(ParsingError::end_of_line().because(format!("`%{flag} {{STATE_NAME}}`")))
+                    return Err(
+                        ParsingError::end_of_line().because(format!("`%{flag} {{STATE_NAME}}`"))
+                    );
                 }
 
                 let states_type = StateType::try_from(flag.as_str()).unwrap();
-                
+
                 // First element is now empty after take(), remove it
                 split.remove(0);
 
                 // Validate that all state names follow C naming conventions
                 for name in &split {
                     if !Utils::is_iso_C_normed(name) {
-                        return Err(ParsingError::syntax(format!("`{name}`")).because("states must be iso-C normed"));
+                        return Err(ParsingError::syntax(format!("`{name}`"))
+                            .because("states must be iso-C normed"));
                     }
                 }
 
-                return Ok(DefinitionType::StateDeclaration(
-                    states_type,
-                    split,
-                ));
+                return Ok(DefinitionType::StateDeclaration(states_type, split));
             }
             // Table size declarations (%p, %n, %a, %e, %k, %o followed by a number)
             "p" | "n" | "a" | "e" | "k" | "o" => {
@@ -389,7 +394,7 @@ impl Definitions {
     }
 
     /// Verifies that a split line has the expected number of parts.
-    /// 
+    ///
     /// Returns an error if:
     /// - The line has fewer parts than expected
     /// - The line has more parts than expected
@@ -401,14 +406,15 @@ impl Definitions {
         let expected_err_msg = expected_err_msg.to_string();
 
         if split.len() < expected {
-            return Err(ParsingError::end_of_line()
-                .because(format!("expected: {expected_err_msg}")));
+            return Err(
+                ParsingError::end_of_line().because(format!("expected: {expected_err_msg}"))
+            );
         }
 
         if split.len() > expected {
-            return Err(
-                ParsingError::unexpected_token(&split[expected]).because("expected").because(expected_err_msg),
-            );
+            return Err(ParsingError::unexpected_token(&split[expected])
+                .because("expected")
+                .because(expected_err_msg));
         }
 
         Ok(())

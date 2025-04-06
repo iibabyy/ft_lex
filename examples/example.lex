@@ -27,9 +27,10 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 %%
 
 
-(abc  { BEGIN(INITIAL); }
+<COMMENT>"/a..d"         { BEGIN(COMMENT); }
 
-<COMMENT>"/asd"         { BEGIN(COMMENT); }
+.. printf("HAHAHA\n");
+(.+|a) printf("BABABA\n");
 
 <COMMENT>{
   {DIGIT}a        { BEGIN(INITIAL); }

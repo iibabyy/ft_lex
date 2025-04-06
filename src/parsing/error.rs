@@ -11,7 +11,7 @@ pub enum ParsingErrorType {
 
     UnexpectedEof(String),
 
-    Warning(String)
+    Warning(String),
 }
 
 /// A structured error type for parsing operations that includes context about where and why the error occurred.
@@ -30,7 +30,7 @@ pub struct ParsingError {
     pub type_: ParsingErrorType,
 
     /// Additional error messages that provide context about the error
-    causes: Vec<String>
+    causes: Vec<String>,
 }
 
 impl std::error::Error for ParsingError {}
@@ -60,29 +60,22 @@ impl std::fmt::Display for ParsingError {
             ParsingErrorType::Io(err) => err.to_string(),
             ParsingErrorType::Syntax(err) => err.to_string(),
             ParsingErrorType::UnexpectedEof(err) => err.to_string(),
-            ParsingErrorType::Warning(err) => err.to_string()
+            ParsingErrorType::Warning(err) => err.to_string(),
         };
 
         let line_and_char_index = if self.line_index.is_some() {
-            let char_index = self.char_index
+            let char_index = self
+                .char_index
                 .and_then(|index| Some(format!(":{index}")))
                 .unwrap_or("".to_string());
 
-            format!(
-                ":{}{}",
-                self.line_index.as_ref().unwrap() + 1,
-                char_index
-            )
+            format!(":{}{}", self.line_index.as_ref().unwrap() + 1, char_index)
         } else {
             "".to_string()
         };
 
         let file = if self.file.is_some() {
-            format!(
-                "{}{}",
-                self.file.as_ref().unwrap(),
-                line_and_char_index
-            )
+            format!("{}{}", self.file.as_ref().unwrap(), line_and_char_index)
         } else {
             "".to_string()
         };
@@ -94,10 +87,7 @@ impl std::fmt::Display for ParsingError {
             causes.push_str(cause);
         });
 
-        write!(f,
-            "{}: {}{}",
-            file, message, causes
-        )
+        write!(f, "{}: {}{}", file, message, causes)
     }
 }
 
@@ -115,7 +105,7 @@ impl ParsingError {
             line_index: None,
             file: None,
             type_: ParsingErrorType::Io(err),
-            causes: Vec::new()
+            causes: Vec::new(),
         }
     }
 
@@ -126,7 +116,7 @@ impl ParsingError {
             line_index: None,
             file: None,
             type_: ParsingErrorType::Syntax(err.to_string()),
-            causes: Vec::new()
+            causes: Vec::new(),
         }
     }
 
@@ -137,7 +127,7 @@ impl ParsingError {
             line_index: None,
             file: None,
             type_: ParsingErrorType::Warning(err.to_string()),
-            causes: Vec::new()
+            causes: Vec::new(),
         }
     }
 
@@ -148,7 +138,7 @@ impl ParsingError {
             line_index: None,
             file: None,
             type_: ParsingErrorType::UnexpectedEof(err.to_string()),
-            causes: Vec::new()
+            causes: Vec::new(),
         }
     }
 
@@ -157,13 +147,13 @@ impl ParsingError {
         self.file = Some(file.to_string());
         self
     }
-    
+
     /// Adds line number context to the error.
     pub fn line(mut self, line_index: usize) -> Self {
         self.line_index = Some(line_index);
         self
     }
-    
+
     /// Adds character position context to the error.
     pub fn char(mut self, char_index: usize) -> Self {
         self.char_index = Some(char_index);

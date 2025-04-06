@@ -7,7 +7,6 @@ pub use post2nfa::*;
 pub mod nfa_simulation;
 pub use nfa_simulation::*;
 
-
 use std::{collections::VecDeque, fmt, ops, str::Chars};
 
 use super::*;
@@ -101,8 +100,6 @@ impl TokenType {
     }
 }
 
-
-
 // 3. DISPLAY IMPLEMENTATIONS
 // =========================
 
@@ -139,21 +136,21 @@ impl fmt::Display for TokenType {
 impl fmt::Display for CharacterClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
-        
+
         if self.negated {
             write!(f, "^")?;
         }
-        
+
         // Print individual characters
         for &c in &self.singles {
             write!(f, "{}", c)?;
         }
-        
+
         // Print ranges
         for &(start, end) in &self.ranges {
             write!(f, "{}-{}", start, end)?;
         }
-        
+
         write!(f, "]")
     }
 }
@@ -184,15 +181,12 @@ impl From<RegexType> for TokenType {
             RegexType::Quant(_) => TokenType::UnaryOperator(value),
 
             // Two element operator
-            RegexType::Or
-                | RegexType::Concatenation => TokenType::BinaryOperator(value),
-            
+            RegexType::Or | RegexType::Concatenation => TokenType::BinaryOperator(value),
+
             // start or end of line conditions
-            RegexType::LineStart
-                | RegexType::LineEnd => TokenType::StartOrEndCondition(value),
+            RegexType::LineStart | RegexType::LineEnd => TokenType::StartOrEndCondition(value),
 
-
-            _ => TokenType::Literal(value)
+            _ => TokenType::Literal(value),
         }
     }
 }
@@ -203,7 +197,6 @@ impl From<RegexType> for TokenType {
 impl RegexType {
     pub fn precedence(&self) -> usize {
         match self {
-
             RegexType::Quant(_) => 3,
 
             RegexType::Concatenation => 2,
@@ -224,47 +217,49 @@ impl RegexType {
 
             // One element operator
             RegexType::Quant(_) => TokenType::UnaryOperator(self.clone()),
-            
-            // Two element operator
-            RegexType::Or
-                | RegexType::Concatenation => TokenType::BinaryOperator(self.clone()),
-            
-            // start or end of line conditions
-            RegexType::LineStart
-                | RegexType::LineEnd => TokenType::StartOrEndCondition(self.clone()),
 
-            _ => TokenType::Literal(self.clone())
+            // Two element operator
+            RegexType::Or | RegexType::Concatenation => TokenType::BinaryOperator(self.clone()),
+
+            // start or end of line conditions
+            RegexType::LineStart | RegexType::LineEnd => {
+                TokenType::StartOrEndCondition(self.clone())
+            }
+
+            _ => TokenType::Literal(self.clone()),
         }
     }
 
     pub fn match_(&self, c: &char) -> bool {
+        match self {
+            RegexType::Char(char) => char == c,
 
-		match self {
-			RegexType::Char(char) => char == c,
+            RegexType::Class(class) => class.matches(c),
 
-			RegexType::Class(class) => class.matches(c),
-
-			_ => todo!()
-		}
-	}
+            _ => todo!(),
+        }
+    }
 }
 
 impl TokenType {
     pub fn need_concatenation_with(&self, other: &RegexType) -> bool {
         match (self, other.type_()) {
             // Literal followed by literal or opening parenthesis
-            (TokenType::Literal(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
+            (TokenType::Literal(_), TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
 
             // Closing parenthesis followed by literal/opening parenthesis
-            (TokenType::CloseParenthesis(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
+            (
+                TokenType::CloseParenthesis(_),
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_),
+            ) => true,
 
             // Unary operator followed by literal/opening parenthesis
-            (TokenType::UnaryOperator(_),
-                TokenType::Literal(_) | TokenType::OpenParenthesis(_)) => true,
+            (
+                TokenType::UnaryOperator(_),
+                TokenType::Literal(_) | TokenType::OpenParenthesis(_),
+            ) => true,
 
-            _ => false
+            _ => false,
         }
     }
 
@@ -275,7 +270,7 @@ impl TokenType {
             Self::CloseParenthesis(rt) => rt.precedence(),
             Self::UnaryOperator(rt) => rt.precedence(),
             Self::BinaryOperator(rt) => rt.precedence(),
-            Self::StartOrEndCondition(rt) => rt.precedence()
+            Self::StartOrEndCondition(rt) => rt.precedence(),
         }
     }
 }
@@ -291,7 +286,9 @@ impl Regex {
 
         let postfix = re2post(tokens_with_concatenation)?;
 
-        postfix.iter().for_each(|token| eprint!("{} ", token.to_string()));
+        postfix
+            .iter()
+            .for_each(|token| eprint!("{} ", token.to_string()));
 
         eprintln!();
 
@@ -304,32 +301,30 @@ impl Regex {
 
     pub fn add_concatenation(tokens: VecDeque<RegexType>) -> VecDeque<TokenType> {
         if tokens.len() < 2 {
-            return tokens.into_iter()
-                .map(TokenType::from)
-                .collect();
+            return tokens.into_iter().map(TokenType::from).collect();
         }
 
         let mut result: VecDeque<TokenType> = VecDeque::with_capacity(tokens.len() * 2);
         let mut tokens_iter = tokens.into_iter().peekable();
-        
+
         // Process first token
         if let Some(token) = tokens_iter.next() {
             result.push_back(TokenType::from(token));
-            
+
             // Process remaining tokens
             while let Some(next_token) = tokens_iter.next() {
                 let last = result.back().unwrap();
                 let current = &next_token;
-                
+
                 // Check if concatenation is needed
                 if last.need_concatenation_with(current) {
                     result.push_back(TokenType::from(RegexType::Concatenation));
                 }
-                
+
                 result.push_back(TokenType::from(next_token));
             }
         }
-        
+
         result
     }
 
@@ -350,24 +345,26 @@ impl Regex {
     }
 
     /// Handling litterals (trick: transform litterals into parenthesis of chars)
-    pub fn add_string(tokens: &mut VecDeque<RegexType>, chars: &mut Chars<'_>) -> ParsingResult<()> {
+    pub fn add_string(
+        tokens: &mut VecDeque<RegexType>,
+        chars: &mut Chars<'_>,
+    ) -> ParsingResult<()> {
         // Open parenthesis replace open '"'
         tokens.push_back(RegexType::OpenParenthesis);
 
         while let Some(c) = chars.next() {
-            match c {                            
+            match c {
                 '\\' => {
-                    let c = chars.next()
-                        .unwrap_or('\\');
+                    let c = chars.next().unwrap_or('\\');
 
                     tokens.push_back(RegexType::Char(Utils::backslashed(c)));
-                },
+                }
 
                 '\"' => {
                     // Close parenthesis replace close '"'
                     tokens.push_back(RegexType::CloseParenthesis);
                     return Ok(());
-                },
+                }
 
                 c => tokens.push_back(RegexType::Char(c)),
             }
@@ -377,18 +374,24 @@ impl Regex {
     }
 
     /// Handle character classes ([...])
-    pub fn add_character_class(tokens: &mut VecDeque<RegexType>, chars: &mut Chars<'_>) -> ParsingResult<()> {
+    pub fn add_character_class(
+        tokens: &mut VecDeque<RegexType>,
+        chars: &mut Chars<'_>,
+    ) -> ParsingResult<()> {
         let class = CharacterClass::parse(chars)?;
         tokens.push_back(RegexType::Class(class));
         Ok(())
     }
 
     /// Handle quantifiers ({n}, {n,}, {n,m})
-    pub fn add_quantifier(tokens: &mut VecDeque<RegexType>, chars: &mut Chars<'_>) -> ParsingResult<()> {
+    pub fn add_quantifier(
+        tokens: &mut VecDeque<RegexType>,
+        chars: &mut Chars<'_>,
+    ) -> ParsingResult<()> {
         let mut digits1 = String::new();
         let mut digits2 = String::new();
         let mut saw_comma = false;
-        
+
         while let Some(c) = chars.next() {
             match c {
                 '0'..='9' => {
@@ -397,44 +400,50 @@ impl Regex {
                     } else {
                         digits1.push(c);
                     }
-                },
+                }
                 ',' => {
                     saw_comma = true;
-                },
+                }
                 '}' => {
                     let quant = if !saw_comma {
                         // {n}
-                        let n = digits1.parse::<usize>()
-                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        let n = digits1.parse::<usize>().map_err(|_| {
+                            ParsingError::unrecognized_rule().because("Invalid quantifier number")
+                        })?;
                         Quantifier::Exact(n)
                     } else if digits2.is_empty() {
                         // {n,}
-                        let n = digits1.parse::<usize>()
-                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
+                        let n = digits1.parse::<usize>().map_err(|_| {
+                            ParsingError::unrecognized_rule().because("Invalid quantifier number")
+                        })?;
                         Quantifier::AtLeast(n)
                     } else {
                         // {n,m}
-                        let n = digits1.parse::<usize>()
-                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
-                        let m = digits2.parse::<usize>()
-                            .map_err(|_| ParsingError::unrecognized_rule().because("Invalid quantifier number"))?;
-                        
+                        let n = digits1.parse::<usize>().map_err(|_| {
+                            ParsingError::unrecognized_rule().because("Invalid quantifier number")
+                        })?;
+                        let m = digits2.parse::<usize>().map_err(|_| {
+                            ParsingError::unrecognized_rule().because("Invalid quantifier number")
+                        })?;
+
                         if n > m {
-                            return Err(ParsingError::unrecognized_rule().because("Invalid quantifier range: min > max"));
+                            return Err(ParsingError::unrecognized_rule()
+                                .because("Invalid quantifier range: min > max"));
                         }
-                        
+
                         Quantifier::Range(n, m)
                     };
-                    
+
                     tokens.push_back(RegexType::Quant(quant));
                     return Ok(());
-                },
+                }
                 _ => {
-                    return Err(ParsingError::unrecognized_rule().because("Invalid character in quantifier"));
+                    return Err(ParsingError::unrecognized_rule()
+                        .because("Invalid character in quantifier"));
                 }
             }
         }
-        
+
         Err(ParsingError::unrecognized_rule().because("Unclosed quantifier"))
     }
 
@@ -460,7 +469,7 @@ impl Regex {
 
             '\\' => {
                 let next_c = chars.next().unwrap_or('\\');
-                
+
                 // Check if it's a shorthand character class
                 match next_c {
                     'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
@@ -469,11 +478,11 @@ impl Regex {
                         } else {
                             RegexType::Char(Utils::backslashed(next_c))
                         }
-                    },
+                    }
                     // Handle other escape sequences
-                    _ => RegexType::Char(Utils::backslashed(next_c))
+                    _ => RegexType::Char(Utils::backslashed(next_c)),
                 }
-            },
+            }
 
             c => RegexType::Char(c),
         }
@@ -520,8 +529,11 @@ impl CharacterClass {
 
     // Check if a character is contained in this class
     pub fn contains_char(&self, c: &char) -> bool {
-        self.singles.contains(c) || 
-        self.ranges.iter().any(|(start, end)| start <= c && c <= end)
+        self.singles.contains(c)
+            || self
+                .ranges
+                .iter()
+                .any(|(start, end)| start <= c && c <= end)
     }
 
     // Check if a character matches this class (considering negation)
@@ -556,7 +568,7 @@ impl CharacterClass {
             for &c in &other.singles {
                 self.add_char(c);
             }
-            
+
             // Add all ranges from other
             for &(start, end) in &other.ranges {
                 self.add_range(start, end);
@@ -569,13 +581,13 @@ impl CharacterClass {
         let mut class = Self::new();
         let mut negated = false;
         let mut prev_char: Option<char> = None;
-        
+
         // Check for negation
         if let Some('^') = chars.clone().next() {
             negated = true;
             chars.next(); // Consume the '^'
         }
-        
+
         while let Some(c) = chars.next() {
             match c {
                 ']' => {
@@ -598,7 +610,8 @@ impl CharacterClass {
                                 prev_char = None;
                             }
                         } else {
-                            return Err(ParsingError::unrecognized_rule().because("Unclosed character class"));
+                            return Err(ParsingError::unrecognized_rule()
+                                .because("Unclosed character class"));
                         }
                     } else {
                         // '-' at the beginning is a literal character
@@ -612,7 +625,8 @@ impl CharacterClass {
                         class.add_char(interpreted);
                         prev_char = Some(interpreted);
                     } else {
-                        return Err(ParsingError::unrecognized_rule().because("Escape sequence at end of character class"));
+                        return Err(ParsingError::unrecognized_rule()
+                            .because("Escape sequence at end of character class"));
                     }
                 }
                 c => {
@@ -621,7 +635,7 @@ impl CharacterClass {
                 }
             }
         }
-        
+
         Err(ParsingError::unrecognized_rule().because("Unclosed character class"))
     }
 
@@ -631,13 +645,13 @@ impl CharacterClass {
         class.add_char(c);
         class
     }
-    
+
     pub fn from_range(start: char, end: char) -> Self {
         let mut class = Self::new();
         class.add_range(start, end);
         class
     }
-    
+
     pub fn from_negated(other: CharacterClass) -> Self {
         let mut class = other;
         class.negated = true;
@@ -653,7 +667,8 @@ impl CharacterClass {
             'W' => Ok(Self::non_word_char()),
             's' => Ok(Self::whitespace()),
             'S' => Ok(Self::non_whitespace()),
-            _ => Err(ParsingError::unrecognized_rule().because(&format!("Unknown shorthand class \\{}", c))),
+            _ => Err(ParsingError::unrecognized_rule()
+                .because(&format!("Unknown shorthand class \\{}", c))),
         }
     }
 

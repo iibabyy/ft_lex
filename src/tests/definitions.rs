@@ -1,4 +1,6 @@
-use crate::parsing::definitions::{Definitions, StateType, DefinitionType, TableSizeDeclaration, TypeDeclaration};
+use crate::parsing::definitions::{
+    DefinitionType, Definitions, StateType, TableSizeDeclaration, TypeDeclaration,
+};
 use crate::parsing::error::ParsingResult;
 use crate::parsing::reader::Reader;
 use std::io::Cursor;
@@ -42,7 +44,7 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
         // Successfully parsed the empty section
         assert!(defs.substitutes.is_empty());
@@ -56,9 +58,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "DIGIT [0-9]\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         // Check the substitution was parsed correctly
         assert_eq!(defs.substitutes.get("DIGIT"), Some(&"[0-9]".to_string()));
         Ok(())
@@ -69,7 +71,7 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "123DIGIT [0-9]\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         let result = defs.parse(&mut reader);
         assert!(result.is_err());
     }
@@ -79,9 +81,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = " int counter = 0;\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         assert_eq!(defs.fragments.len(), 1);
         assert_eq!(defs.fragments[0], "int counter = 0;");
         Ok(())
@@ -92,9 +94,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%{\n  #include <stdio.h>\n  int counter = 0;\n%}\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         assert_eq!(defs.fragments.len(), 1);
         assert!(defs.fragments[0].contains("#include <stdio.h>"));
         assert!(defs.fragments[0].contains("int counter = 0;"));
@@ -106,7 +108,7 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%{\n  #include <stdio.h>\n  int counter = 0;\n";
         let mut reader = reader_from_str(input);
-        
+
         let result = defs.parse(&mut reader);
         assert!(result.is_err());
     }
@@ -116,9 +118,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%s STATE1 STATE2\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         assert_eq!(defs.states.get("STATE1"), Some(&StateType::Inclusive));
         assert_eq!(defs.states.get("STATE2"), Some(&StateType::Inclusive));
         Ok(())
@@ -129,9 +131,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%x STATE1 STATE2\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         assert_eq!(defs.states.get("STATE1"), Some(&StateType::Exclusive));
         assert_eq!(defs.states.get("STATE2"), Some(&StateType::Exclusive));
         Ok(())
@@ -142,7 +144,7 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%s STATE1\n%s STATE1\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         let result = defs.parse(&mut reader);
         assert!(result.is_err());
     }
@@ -152,19 +154,22 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%p 5000\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
-        assert_eq!(defs.table_sizes.get(&TableSizeDeclaration::Positions), Some(&5000));
+
+        assert_eq!(
+            defs.table_sizes.get(&TableSizeDeclaration::Positions),
+            Some(&5000)
+        );
         Ok(())
     }
 
     #[test]
     fn test_parse_invalid_table_size() {
         let mut defs = Definitions::new();
-        let input = "%p -100\n%%\n";  // Negative number should be invalid
+        let input = "%p -100\n%%\n"; // Negative number should be invalid
         let mut reader = reader_from_str(input);
-        
+
         let result = defs.parse(&mut reader);
         assert!(result.is_err());
     }
@@ -174,9 +179,9 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%array\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         assert_eq!(defs.type_declaration, Some(TypeDeclaration::Array));
         Ok(())
     }
@@ -186,10 +191,10 @@ mod tests {
         let mut defs = Definitions::new();
         let input = "%array\n%pointer\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         // This should succeed but with a warning (which we can't easily verify)
         defs.parse(&mut reader)?;
-        
+
         // The second declaration should override the first
         assert_eq!(defs.type_declaration, Some(TypeDeclaration::Pointer));
         Ok(())
@@ -216,26 +221,32 @@ ALPHANUM    [a-zA-Z0-9]
 %p 5000
 %%
 
-        "#;  // Note the extra newline at the end to ensure proper parsing
+        "#; // Note the extra newline at the end to ensure proper parsing
         let mut reader = reader_from_str(input);
-        
+
         defs.parse(&mut reader)?;
-        
+
         // Verify each component
         assert_eq!(defs.substitutes.get("DIGIT"), Some(&"[0-9]".to_string()));
         assert_eq!(defs.substitutes.get("ALPHA"), Some(&"[a-zA-Z]".to_string()));
-        assert_eq!(defs.substitutes.get("ALPHANUM"), Some(&"[a-zA-Z0-9]".to_string()));
-        
+        assert_eq!(
+            defs.substitutes.get("ALPHANUM"),
+            Some(&"[a-zA-Z0-9]".to_string())
+        );
+
         assert!(!defs.fragments.is_empty());
         assert!(defs.fragments[0].contains("#include <stdio.h>"));
-        
+
         assert_eq!(defs.states.get("STRING"), Some(&StateType::Inclusive));
         assert_eq!(defs.states.get("COMMENT"), Some(&StateType::Inclusive));
         assert_eq!(defs.states.get("EXCLUSIVE"), Some(&StateType::Exclusive));
-        
+
         assert_eq!(defs.type_declaration, Some(TypeDeclaration::Pointer));
-        assert_eq!(defs.table_sizes.get(&TableSizeDeclaration::Positions), Some(&5000));
-        
+        assert_eq!(
+            defs.table_sizes.get(&TableSizeDeclaration::Positions),
+            Some(&5000)
+        );
+
         Ok(())
     }
 
@@ -244,7 +255,7 @@ ALPHANUM    [a-zA-Z0-9]
         let mut defs = Definitions::new();
         let input = "%invalid 123\n%%\n";
         let mut reader = reader_from_str(input);
-        
+
         let result = defs.parse(&mut reader);
         assert!(result.is_err());
     }
@@ -253,13 +264,13 @@ ALPHANUM    [a-zA-Z0-9]
     fn test_check_split_size() {
         // Testing the check_split_size utility function
         let split = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        
+
         // Correct size
         assert!(Definitions::check_split_size(&split, 3, "test").is_ok());
-        
+
         // Too few elements
         assert!(Definitions::check_split_size(&split, 4, "test").is_err());
-        
+
         // Too many elements
         assert!(Definitions::check_split_size(&split, 2, "test").is_err());
     }

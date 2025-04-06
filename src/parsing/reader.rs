@@ -1,5 +1,8 @@
 use std::{
-    collections::VecDeque, io::{stdin, Bytes, Lines}, iter::{Enumerate, Peekable}, str::Chars
+    collections::VecDeque,
+    io::{stdin, Bytes, Lines},
+    iter::{Enumerate, Peekable},
+    str::Chars,
 };
 
 use super::*;
@@ -13,7 +16,7 @@ pub struct Reader<R: Read> {
     line_index: usize,
 
     end_of_line: bool,
-    
+
     rest: VecDeque<char>,
 }
 
@@ -32,7 +35,7 @@ impl<R: Read> Reader<R> {
         })
     }
 
-    pub fn next(&mut self) -> io::Result<Option<u8>> {	
+    pub fn next(&mut self) -> io::Result<Option<u8>> {
         if self.end_of_line == true {
             self.line_index += 1;
             self.end_of_line = false;
@@ -41,7 +44,7 @@ impl<R: Read> Reader<R> {
         let c = if let Some(c) = self.rest.pop_front() {
             c
         } else if let Some(c) = self.chars.next() {
-			c? as char
+            c? as char
         } else {
             return Ok(None);
         };
@@ -65,7 +68,7 @@ impl<R: Read> Reader<R> {
                 line.push(char as char);
             } else {
                 if line.is_empty() == false {
-                    return Ok(Some(line))
+                    return Ok(Some(line));
                 }
 
                 return Ok(None);
@@ -88,17 +91,16 @@ impl<R: Read> Reader<R> {
     }
 
     pub fn push_str(&mut self, s: &str) {
-		self.rest.extend(s.chars());
+        self.rest.extend(s.chars());
     }
 
     pub fn push_char(&mut self, c: char) {
         self.rest.push_back(c);
     }
-	
-	pub fn peek(&mut self) -> Option<&Result<u8, io::Error>> {
-		self.chars.peek()
-	}
-	
+
+    pub fn peek(&mut self) -> Option<&Result<u8, io::Error>> {
+        self.chars.peek()
+    }
 }
 
 pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {

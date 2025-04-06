@@ -145,7 +145,10 @@ impl Utils {
         Ok((None, save))
     }
 
-    pub fn read_until_valid<'a>(line: &'a str, p: impl Fn(char) -> bool) -> Option<(String, &'a str)> {
+    pub fn read_until_valid<'a>(
+        line: &'a str,
+        p: impl Fn(char) -> bool,
+    ) -> Option<(String, &'a str)> {
         let mut res = String::new();
         let mut skip_until: Vec<char> = vec![];
 
@@ -159,24 +162,24 @@ impl Utils {
                 '\"' if until == Some(&'\"') => {
                     res.push('\"');
                     skip_until.pop();
-                },
+                }
 
                 // Start quotes
-                '\"'  => {
+                '\"' => {
                     res.push('\"');
                     skip_until.push('\"');
-                },
+                }
 
                 // In quotes
                 c if until == Some(&'\"') => {
                     res.push(c);
-                },
+                }
 
                 // Start brackets
                 '[' => {
                     res.push(c);
                     skip_until.push(']');
-                },
+                }
 
                 ']' if until == Some(&']') => {
                     res.push(c);
@@ -194,18 +197,18 @@ impl Utils {
                     } else {
                         break;
                     }
-                },
+                }
 
                 c if p(c) == true => {
                     res.push(c);
-                    return Some((res, chars.as_str()))
-                },
+                    return Some((res, chars.as_str()));
+                }
 
                 c => res.push(c),
             }
         }
 
-        return None
+        return None;
     }
 
     /// Return true if found, false if not. The strings vec is all the lines readed, excluding the delimiter line if found
@@ -248,7 +251,7 @@ impl Utils {
             'n' => '\n',
             't' => '\t',
             'r' => '\r',
-            _ => c
+            _ => c,
         }
     }
 
