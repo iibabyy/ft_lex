@@ -386,7 +386,7 @@ impl Fragment {
     }
 
     pub fn exact_repeat(self, n: &usize) -> Self {
-        let mut fragment = self;
+        let mut fragment = self.deep_clone();
         let n = *n;
 
         if n == 0 {
@@ -396,7 +396,7 @@ impl Fragment {
         }
 
         for _ in 1..n {
-            let cloned_fragment = fragment.deep_clone();
+            let cloned_fragment = self.deep_clone();
 
             fragment = fragment.and(cloned_fragment);
         }
