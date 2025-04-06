@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 fn pattern_to_nfa(pattern: &str) -> ParsingResult<Nfa> {
     let tokens = Regex::tokens(pattern)?;
     let infix = Regex::add_concatenation(tokens);
-	let postfix = re2post(infix)?;
+    let postfix = re2post(infix)?;
     post2nfa(postfix)
 }
 
@@ -740,8 +740,8 @@ fn test_complex_integration() {
     let nfa_complex = pattern_to_nfa("^(a|b)+c*d{2,3}$").unwrap();
     
     // Should match
-    // assert!(input_match(&nfa_complex, "add"));
-    // assert!(input_match(&nfa_complex, "bcddd"));
+    assert!(input_match(&nfa_complex, "add"));
+    assert!(input_match(&nfa_complex, "bcddd"));
     assert!(input_match(&nfa_complex, "ababccdd"));
     
     // Shouldn't match

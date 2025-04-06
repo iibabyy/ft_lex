@@ -36,13 +36,11 @@ pub enum State {
     None,
 }
 
-#[derive(Debug)]
 pub struct BasicState {
     pub c: RegexType,
     pub out: VarStatePtr,
 }
 
-#[derive(Debug)]
 pub struct SplitState {
     pub out1: VarStatePtr,
     pub out2: VarStatePtr,
@@ -264,10 +262,10 @@ impl State {
 
             State::Split(split) => {
                 let (cloned_out1, cloned_ptr_list1) = Self::deep_clone_with_memo(&split.out1.borrow(), memo);
-                let cloned_1_is_some = State::is_none_ptr(&cloned_out1);
+                let cloned_1_is_some = State::is_none_ptr(&cloned_out1) == false;
 
                 let (cloned_out2, cloned_ptr_list2) = Self::deep_clone_with_memo(&split.out2.borrow(), memo);
-                let cloned_2_is_some = State::is_none_ptr(&cloned_out2);
+                let cloned_2_is_some = State::is_none_ptr(&cloned_out2) == false;
 
                 let state = State::split(cloned_out1, cloned_out2);
 
@@ -357,9 +355,9 @@ impl Fragment {
     }
 
     pub fn optional(self) -> Self {
-        let s = State::split(State::none(), self.start);
+        let s = State::split(self.start, State::none());
 
-        let none_out = s.borrow().split_out().unwrap().0;
+        let none_out = s.borrow().split_out().unwrap().1;
 
         let ptr_list = utils::append(self.ptr_list, utils::list1(none_out));
 
@@ -376,11 +374,11 @@ impl Fragment {
     /// - range({0,n}): matches between 0 and n times
     /// - at_least({0,}): equivalent to optional_repeat (matches 0 or more times)
     pub fn optional_repeat(self) -> Self {
-        let s = State::split(State::none(), self.start);
+        let s = State::split(self.start, State::none());
 
         utils::patch(&self.ptr_list, &s);
 
-        let none_out = s.borrow().split_out().unwrap().0;
+        let none_out = s.borrow().split_out().unwrap().1;
 
         let ptr_list = utils::list1(none_out);
 
@@ -561,11 +559,11 @@ impl fmt::Display for SplitState {
             f,
             "{{ out1: {:?}, out2: {:?} }}",
             State::is_none_var_ptr(&self.out1)
-                .then_some("...")
-                .unwrap_or("None"),
+                .then_some("None")
+                .unwrap_or("..."),
             State::is_none_var_ptr(&self.out2)
-                .then_some("...")
-                .unwrap_or("None"),
+                .then_some("None")
+                .unwrap_or("..."),
         )
     }
 }
@@ -576,12 +574,25 @@ impl fmt::Display for Fragment {
             f,
             "Fragment {{ start: {:?}, ptr_list: [{}] }}",
             State::is_none_ptr(&self.start)
-                .then_some("...")
+                .then_some(self.start.borrow().to_string().as_str())
                 .unwrap_or("None"),
             self.ptr_list.len()
         )
     }
 }
+
+impl fmt::Debug for BasicState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
+impl fmt::Debug for SplitState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
 
 // 4. NFA CONSTRUCTION FUNCTIONS
 // =============================
