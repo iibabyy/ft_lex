@@ -1,6 +1,6 @@
 use super::*;
 
-// Convert infix regex to postfix
+/// Convert infix regex to postfix
 pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>> {
     let mut operator_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
     let mut output_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
