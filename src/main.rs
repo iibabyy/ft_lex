@@ -5,13 +5,13 @@ use std::fmt::{Debug, Formatter};
 mod tests;
 
 mod parsing;
-pub use parsing::*;
+use parsing::*;
 
 mod arg;
-pub use arg::*;
+use arg::*;
 
 mod regex;
-pub use regex::*;
+use regex::*;
 
 // TODO: error if '\' or '/' in Description section
 

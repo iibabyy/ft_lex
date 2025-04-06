@@ -4,6 +4,24 @@ use std::fmt;
 
 use crate::*;
 
+// ==============================================
+// 1. TYPE DEFINITIONS
+// ==============================================
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegexType {
+    Char(char),
+    LineStart,
+    LineEnd,
+    OpenParenthesis,
+    CloseParenthesis,
+    Any,
+    Or,
+    Concatenation,
+    Class(CharacterClass),
+    Quant(Quantifier),
+}
+
 // Wrapper for RegexType to be used in the conversion to postfix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenType {
@@ -34,6 +52,75 @@ pub enum Quantifier {
     // {n,m}
     Range(usize, usize),
 }
+
+// ==============================================
+// 2. REGEXTYPE IMPLEMENTATIONS
+// ==============================================
+
+// RegexType implementations
+impl RegexType {
+    pub fn precedence(&self) -> usize {
+        match self {
+            RegexType::Quant(_) => 3,
+            RegexType::Concatenation => 2,
+            RegexType::Or => 1,
+            _ => 0,
+        }
+    }
+
+    pub fn type_(&self) -> TokenType {
+        match self {
+            // Opening group
+            RegexType::OpenParenthesis => TokenType::OpenParenthesis(self.clone()),
+
+            // Closing group
+            RegexType::CloseParenthesis => TokenType::CloseParenthesis(self.clone()),
+
+            // One element operator
+            RegexType::Quant(_) => TokenType::UnaryOperator(self.clone()),
+
+            // Two element operator
+            RegexType::Or | RegexType::Concatenation => TokenType::BinaryOperator(self.clone()),
+
+            // start or end of line conditions
+            RegexType::LineStart | RegexType::LineEnd => {
+                TokenType::StartOrEndCondition(self.clone())
+            }
+
+            _ => TokenType::Literal(self.clone()),
+        }
+    }
+
+    pub fn match_(&self, c: &char) -> bool {
+        match self {
+            RegexType::Char(char) => char == c,
+            RegexType::Class(class) => class.matches(c),
+            RegexType::Any => true,
+            _ => todo!(),
+        }
+    }
+}
+
+impl fmt::Display for RegexType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegexType::Char(c) => write!(f, "{}", c),
+            RegexType::LineStart => write!(f, "^"),
+            RegexType::LineEnd => write!(f, "$"),
+            RegexType::OpenParenthesis => write!(f, "("),
+            RegexType::CloseParenthesis => write!(f, ")"),
+            RegexType::Any => write!(f, "."),
+            RegexType::Or => write!(f, "|"),
+            RegexType::Concatenation => write!(f, "&"),
+            RegexType::Class(c) => write!(f, "{}", c),
+            RegexType::Quant(q) => write!(f, "{}", q),
+        }
+    }
+}
+
+// ==============================================
+// 3. TOKENTYPE IMPLEMENTATIONS
+// ==============================================
 
 // TokenType implementations
 impl TokenType {
@@ -129,6 +216,10 @@ impl From<RegexType> for TokenType {
         }
     }
 }
+
+// ==============================================
+// 4. CHARACTER CLASS IMPLEMENTATIONS
+// ==============================================
 
 // CharacterClass implementations
 impl CharacterClass {
@@ -374,6 +465,10 @@ impl fmt::Display for CharacterClass {
     }
 }
 
+// ==============================================
+// 5. QUANTIFIER IMPLEMENTATIONS
+// ==============================================
+
 // Quantifier implementations
 impl fmt::Display for Quantifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -384,6 +479,10 @@ impl fmt::Display for Quantifier {
         }
     }
 }
+
+// ==============================================
+// 6. REGEX PARSING METHODS
+// ==============================================
 
 impl Regex {
     pub fn add_concatenation(tokens: VecDeque<RegexType>) -> VecDeque<TokenType> {
