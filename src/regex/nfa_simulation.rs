@@ -119,7 +119,7 @@ pub struct NfaSimulation<'a> {
 	readed: usize,
 
 	/// The number of characters read until match (if matched)
-	longest_match: Option<usize>,
+	pub longest_match: Option<usize>,
 
     /// NFA to use for matching
     nfa: &'a Nfa,
