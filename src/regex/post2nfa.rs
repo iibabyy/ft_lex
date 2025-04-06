@@ -637,7 +637,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
 			}
 
             RegexType::LineEnd => {
-                if nfa.end_of_line == true || fragments.last().is_none() {
+                if nfa.end_of_line == true || postfix.front().is_some() {
                     return Err(ParsingError::unrecognized_rule()
                         .because("unexpected '$' special character"));
                 }
@@ -665,7 +665,11 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
     }
 
     if fragments.len() != 1 {
-        return Err(ParsingError::unrecognized_rule());
+		if !nfa.start_of_line && !nfa.end_of_line {
+			return Err(ParsingError::unrecognized_rule());
+		}
+
+		fragments.push(Fragment::new(State::match_(), vec![]));
     }
 
     let e = fragments.pop().unwrap();

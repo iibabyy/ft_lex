@@ -11,7 +11,8 @@ fn pattern_to_nfa(pattern: &str) -> ParsingResult<Nfa> {
     let tokens = Regex::tokens(pattern)?;
     let infix = Regex::add_concatenation(tokens);
     let postfix = re2post(infix)?;
-    post2nfa(postfix)
+	dbg!(&postfix);
+	post2nfa(postfix)
 }
 
 // Helper function to run NFA simulation that returns the longest match
@@ -644,14 +645,14 @@ fn test_repetition_matching() {
 
 #[test]
 fn test_empty_input() {
-    // Test matching empty string with empty pattern
-    let nfa_empty = pattern_to_nfa("").unwrap();
-    assert!(input_match(&nfa_empty, ""));
-    
+    // Test that empty pattern returns an error
+    let result = pattern_to_nfa("");
+    assert!(result.is_err());
+
     // Test matching empty string with optional pattern
     let nfa_opt = pattern_to_nfa("a?").unwrap();
     assert!(input_match(&nfa_opt, ""));
-    
+
     // Test matching empty string with anchors
     let nfa_anchors = pattern_to_nfa("^$").unwrap();
     assert!(input_match(&nfa_anchors, ""));

@@ -219,7 +219,7 @@ impl<'a> NfaSimulation<'a> {
 			}
 			self.next_states.remove_matchs();
 		}
-		
+
 		// remove the matchs, to only keep active states in the next states
 		self.switch_to_next_states();
 		return self.status()
@@ -247,6 +247,11 @@ pub fn input_match(nfa: &Nfa, input: &str) -> bool {
 	let start_of_line = true;
 
 	simulation.start(start_of_line);
+
+	// Check if the next states have a match
+	if simulation.current_states.is_matched() {
+		return simulation.nfa.end_of_line == false || input.is_empty();
+	}	
 
 	while let Some(c) = chars.next() {
 		let peek = chars.peek();
