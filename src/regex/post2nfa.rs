@@ -11,8 +11,11 @@ use utils::*;
 // 1. BASIC TYPE DEFINITIONS
 // =========================
 
+/// Represents a C-like pointer to a pointer to a State (e.g. State**)
 pub type VarStatePtr = MutPtr<StatePtr>;
+/// Represents a C-like pointer to a State (e.g. State*)
 pub type StatePtr = MutPtr<State>;
+/// Allow both shareability with Rc and mutability with RefCell
 pub type MutPtr<T> = Rc<RefCell<T>>;
 
 pub fn state_ptr(state: State) -> StatePtr {
@@ -44,6 +47,13 @@ pub struct SplitState {
     pub out2: VarStatePtr,
 }
 
+/// In the NFA, a Fragment is a list of states that can be matched
+/// 
+/// Any pattern can be represented by a Fragment:
+/// 
+/// Basic pattern (one char) -> Fragment with one state
+/// 
+/// For more complex patterns, the fragments can be combined using the `and`, `or`, `optional`, `optional_repeat`, `exact_repeat`, `at_least`, `range` methods
 #[derive(Debug)]
 pub struct Fragment {
     pub start: StatePtr,
@@ -205,6 +215,7 @@ impl State {
         }
     }
 
+    /// Needed for reusing the same fragment (e.g repeting a fragment)
     fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<VarStatePtr>) {
         match self {
             State::Basic(basic) => {
@@ -306,6 +317,9 @@ impl Fragment {
         Fragment::new(self.start, e2.ptr_list)
     }
 
+    /// Creates an OR operation in the NFA by using a Split state to branch between two fragments.
+    /// This implements the alternation (|) operation in regular expressions.
+    /// The Split state allows the NFA to follow either path during matching.
     pub fn or(self, e2: Self) -> Self {
         let s = State::split(self.start, e2.start);
 
@@ -321,7 +335,15 @@ impl Fragment {
 
         Fragment::new(s, ptr_list)
     }
-
+    /// Implements the Kleene star (*) operation, which matches zero or more repetitions of the pattern.
+    /// Unlike optional(), which matches 0 or 1 occurrence, this allows unlimited repetitions.
+    /// This creates a split state that can either skip the pattern (matching 0 times) or
+    /// enter the pattern and then loop back to the split state after completion (allowing multiple matches).
+    /// 
+    /// This is one of several quantifiers that match at least 0 occurrences:
+    /// - optional_repeat(*): matches 0 or more times
+    /// - range({0,n}): matches between 0 and n times
+    /// - at_least({0,}): equivalent to optional_repeat (matches 0 or more times)
     pub fn optional_repeat(self) -> Self {
         let s = State::split(State::none(), self.start);
 
@@ -398,6 +420,19 @@ impl Fragment {
         }
     }
 
+    /// Yes, this is how regex quantifiers are handled in the NFA:
+	/// 
+    /// '*' (zero or more) -> implemented as optional_repeat()
+	/// 
+    /// '+' (one or more) -> implemented as at_least(1)
+    /// 
+    /// '?' (zero or one) -> implemented as optional()
+    /// 
+    /// '{n}' (exactly n) -> implemented as exact_repeat(n)
+    /// 
+    /// '{n,}' (n or more) -> implemented as at_least(n)
+    /// 
+    /// '{n,m}' (between n and m) -> implemented as range(n,m)
     pub fn quantify(self, quantifier: &Quantifier) -> Self {
         match quantifier {
             // {n}
@@ -412,6 +447,9 @@ impl Fragment {
     }
 }
 
+/// Represents the NFA (Non-deterministic Finite Automaton)
+///
+/// end of line and start of line are handled as flags in the NFA
 #[derive(Debug)]
 pub struct Nfa {
     pub start: StatePtr,
@@ -513,6 +551,7 @@ impl fmt::Display for Fragment {
 // 4. NFA CONSTRUCTION FUNCTIONS
 // =============================
 
+/// This function implements Thompson's construction algorithm to convert the postfix regex to an NFA
 pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
     let mut nfa = Nfa::new();
     let mut fragments: Vec<Fragment> = vec![];
@@ -601,6 +640,7 @@ pub mod utils {
         utils::patch(ptr_list, &State::match_());
     }
 
+    /// It connects dangling transitions to a specific state
     pub fn patch(ptr_list: &Vec<VarStatePtr>, state: &StatePtr) {
         for ptr in ptr_list {
             ptr.replace(Rc::clone(state));

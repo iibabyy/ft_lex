@@ -15,6 +15,7 @@ use super::*;
 // =========================
 
 pub struct Regex {
+	// Needed for the conversion to postfix
     operator_stack: Vec<RegexType>,
     output_stack: Vec<RegexType>,
 }
@@ -33,6 +34,7 @@ pub enum RegexType {
     Quant(Quantifier),
 }
 
+// Wrapper for RegexType to be used in the conversion to postfix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenType {
     Literal(RegexType),
@@ -65,14 +67,6 @@ pub enum Quantifier {
 
 // 2. CONVERSION IMPLEMENTATIONS
 // ===========================
-
-impl ops::Deref for TokenType {
-    type Target = RegexType;
-
-    fn deref(&self) -> &Self::Target {
-        self.into_inner()
-    }
-}
 
 impl TokenType {
     /// Converts a TokenType back to its inner RegexType
@@ -236,6 +230,8 @@ impl RegexType {
 
             RegexType::Class(class) => class.matches(c),
 
+			RegexType::Any => true,
+
             _ => todo!(),
         }
     }
@@ -293,10 +289,6 @@ impl Regex {
         eprintln!();
 
         Ok(postfix)
-    }
-
-    pub fn tokens_to_posix(_tokens: VecDeque<RegexType>) {
-        todo!()
     }
 
     pub fn add_concatenation(tokens: VecDeque<RegexType>) -> VecDeque<TokenType> {
@@ -639,7 +631,7 @@ impl CharacterClass {
         Err(ParsingError::unrecognized_rule().because("Unclosed character class"))
     }
 
-    // Compatibility methods to create instances tLineStart match the old enum API
+    // Compatibility methods to create instances
     pub fn from_single(c: char) -> Self {
         let mut class = Self::new();
         class.add_char(c);

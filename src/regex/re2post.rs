@@ -1,5 +1,6 @@
 use super::*;
 
+// Convert infix regex to postfix
 pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>> {
     let mut operator_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
     let mut output_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
@@ -24,7 +25,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
                         Some(_) => output_stack.push(operator_stack.pop().unwrap()),
 
                         // Open parenthesis not found
-                        None => return Err(ParsingError::unrecognized_rule().because("")),
+                        None => return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis")),
                     }
                 }
 
@@ -34,6 +35,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
 
             // Other operator
             token => {
+				// Compare precedence of operators (shunting-yard algorithm)
                 while let Some(next_operator) = operator_stack.last() {
                     if next_operator.precedence() >= token.precedence() {
                         output_stack.push(operator_stack.pop().unwrap());
@@ -47,6 +49,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
         }
     }
 
+    // Check for unclosed parentheses
     while let Some(token) = operator_stack.pop() {
         if matches!(token, TokenType::OpenParenthesis(_)) {
             return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis"));
