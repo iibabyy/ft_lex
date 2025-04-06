@@ -55,6 +55,30 @@ impl StateList {
 			)
 	}
 
+	pub fn is_matched(&self) -> bool {
+		self.states
+		.iter()
+		.any(|state|
+			State::is_match_ptr(state)
+		)
+	}
+
+	pub fn remove_matchs(&mut self) {
+		let mut matchs = vec![];
+
+		self.states.iter().enumerate().for_each(|(index, state)|
+			if State::is_match_ptr(state) {
+				matchs.push(index);
+			}
+		);
+
+		let mut removed = 0;
+		for index in matchs {
+			self.states.remove(index - removed);
+			removed += 1;
+		}
+	}
+
 	pub fn push(&mut self, state: &StatePtr) {
 		self.states.push(Rc::clone(state));
 	}
@@ -66,6 +90,11 @@ impl StateList {
 	pub fn is_empty(&self) -> bool {
 		self.states.is_empty()
 	}
+	
+	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
+		self.states.iter()
+	}
+	
 }
 
 pub enum NfaStatus {
@@ -76,10 +105,9 @@ pub enum NfaStatus {
 
 /// Main simulation controller for NFA-based regex matching
 #[derive(Debug)]
+// Input string to match against
 pub struct NfaSimulation<'a> {
-    // Input string to match against
-    input: &'a str,
-	chars: Peekable<Chars<'a>>,
+	start_of_line: bool,
 	readed: usize,
 	longest_match: Option<usize>,
 
@@ -93,9 +121,7 @@ pub struct NfaSimulation<'a> {
 }
 
 impl<'a> NfaSimulation<'a> {
-	pub fn new(nfa: &'a Nfa, input: &'a str) -> Self {
-
-		let chars = input.chars().peekable();
+	pub fn new(nfa: &'a Nfa) -> Self {
 
 		let readed = 0;
 		let longest_match = None;
@@ -104,8 +130,7 @@ impl<'a> NfaSimulation<'a> {
 		let next_states = StateList::new();
 
 		NfaSimulation {
-			input,
-			chars,
+			start_of_line: false,
 			readed,
 			longest_match,
 			nfa,
@@ -120,7 +145,15 @@ impl<'a> NfaSimulation<'a> {
 		self.next_states.clear();
 	}
 
+	pub fn check_start_of_line(&self) -> bool {
+		self.start_of_line == self.nfa.start_of_line
+	}
+
 	pub fn status(&self) -> NfaStatus {
+		if self.check_start_of_line() == false {
+			return NfaStatus::NoMatch
+		}
+
 		if self.current_states.is_empty() == false {
 			return NfaStatus::Pending
 		}
@@ -132,38 +165,70 @@ impl<'a> NfaSimulation<'a> {
 		NfaStatus::Match(self.longest_match.unwrap())
 	}
 
-	pub fn step(&mut self) -> NfaStatus {
+	pub fn step(&mut self, c: &char, end_of_line: bool) -> NfaStatus {
 
-		if self.current_states.is_empty() {
+		if self.check_start_of_line() == false || self.current_states.is_empty() {
 			return self.status()
 		}
 
-		
+		self.readed += 1;
+
+		for state in self.current_states.iter() {
+			if State::is_basic_ptr(state) == false {
+				continue;
+			}
+
+			let borrowed_state = state.borrow();
+
+			if borrowed_state.matche_with(c) {
+				let out = &borrowed_state.basic_out().unwrap();
+				let next_state = out.borrow();
+
+				self.next_states.add_state(&next_state);
+			}
+		}
+
+		if self.next_states.is_matched() {
+			if self.nfa.end_of_line == end_of_line {
+				self.longest_match = Some(self.readed);
+			}
+			self.next_states.remove_matchs();
+		}
 
 		self.switch_to_next_states();
-		todo!()
+		
+		return self.status()
+	}
+
+	pub fn start(&mut self, start_of_line: bool) {
+		self.readed = 0;
+		self.longest_match = None;
+		self.current_states.clear();
+		self.next_states.clear();
+		self.start_of_line = start_of_line;
 	}
 }
 
 pub fn input_match(nfa: &Nfa, input: &str) -> bool {
-    // 	let mut simulation = NfaSimulation::new(input, nfa);
+    let mut simulation = NfaSimulation::new(nfa);
 
-    // 	if State::is_none_ptr(&nfa.start) {
-    // 		return false
-    // 	}
+	let mut chars = input.chars().peekable();
 
-    // 	if State::is_match_ptr(&nfa.start) {
-    // 		return true
-    // 	}
+	let start_of_line = true;
 
-    // 	while simulation.has_input_left() {
-    // 		simulation.step();
-    // 	}
+	simulation.start(start_of_line);
 
-    // 	if nfa.end_of_line == true && simulation.chars.peek().is_some() {
-    // 		return false;
-    // 	}
+	while let Some(c) = chars.next() {
+		let peek = chars.peek();
+		let end_of_line = peek == None || peek == Some(&'\n');
 
-    // 	simulation.current_states.is_matched()
-    todo!()
+		match simulation.step(&c, end_of_line) {
+			NfaStatus::Pending => continue,
+
+			// finished
+			_ => break,
+		}
+	}
+
+	simulation.longest_match.is_some()
 }
