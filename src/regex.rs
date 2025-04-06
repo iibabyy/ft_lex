@@ -275,20 +275,16 @@ impl TokenType {
 // ==============================
 
 impl Regex {
-    pub fn new(expr: String) -> ParsingResult<Vec<TokenType>> {
+    pub fn new(expr: String) -> ParsingResult<Nfa> {
         let tokens = Self::tokens(&expr)?;
 
         let tokens_with_concatenation = Self::add_concatenation(tokens);
 
         let postfix = re2post(tokens_with_concatenation)?;
 
-        postfix
-            .iter()
-            .for_each(|token| eprint!("{} ", token.to_string()));
+		let nfa = post2nfa(postfix)?;
 
-        eprintln!();
-
-        Ok(postfix)
+        Ok(nfa)
     }
 
     pub fn add_concatenation(tokens: VecDeque<RegexType>) -> VecDeque<TokenType> {

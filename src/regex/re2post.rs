@@ -1,13 +1,13 @@
 use super::*;
 
 /// Convert infix regex to postfix
-pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>> {
+pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<VecDeque<TokenType>> {
     let mut operator_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
-    let mut output_stack: Vec<TokenType> = Vec::with_capacity(tokens.len());
+    let mut output_stack: VecDeque<TokenType> = VecDeque::with_capacity(tokens.len());
 
     while let Some(token) = tokens.pop_front() {
         match token {
-            TokenType::Literal(type_) => output_stack.push(TokenType::Literal(type_)),
+            TokenType::Literal(type_) => output_stack.push_back(TokenType::Literal(type_)),
 
             TokenType::OpenParenthesis(_) => {
                 operator_stack.push(token);
@@ -22,7 +22,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
                         Some(&TokenType::OpenParenthesis(_)) => break,
 
                         // Push all operator if not parenthesis
-                        Some(_) => output_stack.push(operator_stack.pop().unwrap()),
+                        Some(_) => output_stack.push_back(operator_stack.pop().unwrap()),
 
                         // Open parenthesis not found
                         None => return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis")),
@@ -38,7 +38,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
 				// Compare precedence of operators (shunting-yard algorithm)
                 while let Some(next_operator) = operator_stack.last() {
                     if next_operator.precedence() >= token.precedence() {
-                        output_stack.push(operator_stack.pop().unwrap());
+                        output_stack.push_back(operator_stack.pop().unwrap());
                     } else {
                         break;
                     }
@@ -55,7 +55,7 @@ pub fn re2post(mut tokens: VecDeque<TokenType>) -> ParsingResult<Vec<TokenType>>
             return Err(ParsingError::unrecognized_rule().because("Unclosed parenthesis"));
         }
 
-        output_stack.push(token);
+        output_stack.push_back(token);
     }
 
     return Ok(output_stack);
