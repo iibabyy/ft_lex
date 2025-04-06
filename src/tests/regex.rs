@@ -24,7 +24,7 @@ mod tests {
         assert!(matches!(Regex::into_type(')', &mut chars), RegexType::CloseParenthesis));
         assert!(matches!(Regex::into_type('?', &mut chars), RegexType::Quant(Quantifier::Range(0, 1))));
         assert!(matches!(Regex::into_type('|', &mut chars), RegexType::Or));
-        assert!(matches!(Regex::into_type('.', &mut chars), RegexType::Dot));
+        assert!(matches!(Regex::into_type('.', &mut chars), RegexType::Any));
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod tests {
         // a.b should become a·.·b
         let mut tokens = VecDeque::new();
         tokens.push_back(RegexType::Char('a'));
-        tokens.push_back(RegexType::Dot);
+        tokens.push_back(RegexType::Any);
         tokens.push_back(RegexType::Char('b'));
         
         let result = Regex::add_concatenation(tokens);
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(result.len(), 5);
         assert!(matches!(result[0], TokenType::Literal(RegexType::Char('a'))));
         assert!(matches!(result[1], TokenType::BinaryOperator(RegexType::Concatenation)));
-        assert!(matches!(result[2], TokenType::Literal(RegexType::Dot)));
+        assert!(matches!(result[2], TokenType::Literal(RegexType::Any)));
         assert!(matches!(result[3], TokenType::BinaryOperator(RegexType::Concatenation)));
         assert!(matches!(result[4], TokenType::Literal(RegexType::Char('b'))));
     }

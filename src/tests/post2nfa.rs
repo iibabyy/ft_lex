@@ -176,7 +176,7 @@ mod tests {
     fn test_post2nfa_dot() {
         // Test dot (any character)
         let tokens = create_token_queue(vec![
-            RegexType::Dot
+            RegexType::Any
         ]);
         let nfa = post2nfa(tokens);
         assert!(nfa.is_ok());

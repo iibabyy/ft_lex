@@ -27,7 +27,7 @@ pub enum RegexType {
     LineEnd,
     OpenParenthesis,
     CloseParenthesis,
-    Dot,
+    Any,
     Or,
     Concatenation,
     Class(CharacterClass),
@@ -114,7 +114,7 @@ impl fmt::Display for RegexType {
             RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),
             RegexType::CloseParenthesis => write!(f, ")"),
-            RegexType::Dot => write!(f, "."),
+            RegexType::Any => write!(f, "."),
             RegexType::Or => write!(f, "|"),
             RegexType::Concatenation => write!(f, "&"),
             RegexType::Class(c) => write!(f, "{}", c),
@@ -442,7 +442,7 @@ impl Regex {
         match c {
             '*' => RegexType::Quant(Quantifier::AtLeast(0)),
 
-            '.' => RegexType::Dot,
+            '.' => RegexType::Any,
 
             '+' => RegexType::Quant(Quantifier::AtLeast(1)),
 

@@ -71,6 +71,24 @@ impl State {
 		state_ptr(State::Match)
 	}
 
+	pub fn is_any(&self) -> bool {
+		match self {
+			State::Basic(state) => {
+				state.c == RegexType::Any
+			},
+
+			_ => false,
+		}
+	}
+
+	pub fn is_any_ptr(ptr: &StatePtr) -> bool {
+		ptr.borrow().is_any()
+	}
+
+	pub fn is_any_var_ptr(ptr: &VarStatePtr) -> bool {
+		ptr.borrow().borrow().is_any()
+	}
+
 	pub fn no_match() -> StatePtr {
 		state_ptr(State::NoMatch)
 	}
@@ -440,7 +458,7 @@ impl fmt::Display for State {
 			State::Match => write!(f, "Match()"),
 			
 			State::None => write!(f, "None"),
-            
+             
 			State::Split(split) => write!(f,
 				"Split({:?}, {:?})",
 				split.out1.borrow().borrow().is_none().then_some("...").unwrap_or("None"), 

@@ -41,6 +41,10 @@ impl List {
 		list
 	}
 
+	pub fn skip_any(&mut self) {
+		let mut list = List::new();
+	}
+
 	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
 		self.states.iter()
 	}
@@ -51,17 +55,76 @@ impl List {
 	}
 }
 
-pub struct NfaSimulation<'a> {
+pub struct InputValidation<'a> {
+	chars: Peekable<Chars<'a>>,
+	validated_input: Vec<&'a char>,
+
 	current_states: List,
 	next_states: List,
 
 	on_start_of_line: bool,
 	on_end_of_line: bool,
+}
+
+impl<'a> InputValidation<'a> {
+	pub fn new(c: &char, chars: &Peekable<Chars>, state: &StatePtr) -> Self {
+		let chars = chars.clone();
+
+		let validated_input = Vec::from([c]);
+
+		todo!()
+	}
+}
+
+pub struct RestartState<'a> {
+	states: List,
+	validated: Vec<&'a char>,
+}
+
+impl<'a> RestartState<'a> {
+	pub fn new(state: &StatePtr, validated: &Vec<&'a char>) -> Option<Self> {
+
+		if State::is_basic_ptr(state) == false {
+			return None;
+		}
+
+		if &state.borrow().into_basic().unwrap().c != &RegexType::Any {
+			return None;
+		}
+
+		let states = List::from(state);
+		let validated = validated.clone();
+
+		Some(
+			Self {
+				states,
+				validated
+			}
+		)
+	}
+
+	pub fn check_next_char(&self, c: &char, chars: Peekable<Chars<'a>>) -> Option<InputValidation> {
+
+		for state in self.states.iter() {
+			if state.borrow().matche_with(c) {
+				
+			}
+		}
+
+
+		todo!()
+	}
+}
+
+pub struct NfaSimulation<'a> {
+	nfa: &'a Nfa,
+
+	start_states: List,
+	restart_states: Vec<RestartState<'a>>,
+
+	validations: Vec<InputValidation<'a>>,
 
 	input: &'a str,
-	chars: Peekable<Chars<'a>>,
-
-	nfa: &'a Nfa
 }
 
 impl<'a> NfaSimulation<'a> {
@@ -69,19 +132,22 @@ impl<'a> NfaSimulation<'a> {
 		let current_states = List::from(&nfa.start);
 		let next_states = List::new();
 
-		let on_start_of_line = true;
-		let on_end_of_line = true;
+		let start_states = List::from(&nfa.start);
+		let restart_states = List::new();
+
+		let validations = Vec::with_capacity(1);
 
 		let chars = input.chars().peekable();
 
 		NfaSimulation {
+			nfa,
 			current_states,
 			next_states,
-			on_start_of_line,
-			on_end_of_line,
+			start_states,
+			restart_states,
+			validations,
 			input,
 			chars,
-			nfa
 		}
 	}
 
