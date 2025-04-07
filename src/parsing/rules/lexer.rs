@@ -7,7 +7,7 @@ pub struct RuleLexer<R: Read> {
 }
 
 impl<R: Read> RuleLexer<R> {
-    pub fn new(reader: &mut Reader<R>) -> Self {
+    pub fn new(_reader: &mut Reader<R>) -> Self {
         todo!()
     }
 

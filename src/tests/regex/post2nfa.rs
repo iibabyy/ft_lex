@@ -333,7 +333,7 @@ fn test_nfa_from_postfix() {
     // Test alternation
     let nfa_a_or_b = pattern_to_nfa("a|b").unwrap();
     assert!(State::is_split_ptr(&nfa_a_or_b.start));
-    
+
     // Test complex expression
     let nfa_complex = pattern_to_nfa("a(b|c)*d").unwrap();
     assert!(State::is_basic_ptr(&nfa_complex.start));

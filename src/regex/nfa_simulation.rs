@@ -30,14 +30,13 @@ impl PartialEq for StateList {
 			return false
 		}
 
-		let mut my_states = self.states.iter();
-		let mut other_states = other.states.iter();
+		for other_state in &other.states {
+			let contained = self.states.iter().any(|state|
+				Rc::ptr_eq(state, other_state)
+			);
 
-		while let Some(my_state) = my_states.next() {
-			let other_state = other_states.next().unwrap();
-
-			if Rc::ptr_eq(my_state, other_state) == false {
-				return false;
+			if contained == false {
+				return false
 			}
 		}
 
