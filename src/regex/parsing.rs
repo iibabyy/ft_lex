@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::str::Chars;
 use std::fmt;
 
@@ -15,10 +15,8 @@ pub enum RegexType {
     LineEnd,
     OpenParenthesis,
     CloseParenthesis,
-    Any,
     Or,
     Concatenation,
-    Class(CharacterClass),
     Quant(Quantifier),
 }
 
@@ -33,14 +31,11 @@ pub enum TokenType {
     StartOrEndCondition(RegexType),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterClass {
-    // Whether this is a negated class [^...]
-    negated: bool,
     // Individual characters in the class
-    singles: Vec<char>,
-    // Character ranges in the class
-    ranges: Vec<(char, char)>,
+    chars: HashSet<char>,
+    negated: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -94,8 +89,6 @@ impl RegexType {
     pub fn match_(&self, c: &char) -> bool {
         match self {
             RegexType::Char(char) => char == c,
-            RegexType::Class(class) => class.matches(c),
-            RegexType::Any => true,
             _ => todo!(),
         }
     }
@@ -109,10 +102,8 @@ impl fmt::Display for RegexType {
             RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),
             RegexType::CloseParenthesis => write!(f, ")"),
-            RegexType::Any => write!(f, "."),
             RegexType::Or => write!(f, "|"),
             RegexType::Concatenation => write!(f, "&"),
-            RegexType::Class(c) => write!(f, "{}", c),
             RegexType::Quant(q) => write!(f, "{}", q),
         }
     }
@@ -228,108 +219,98 @@ impl From<RegexType> for TokenType {
 impl CharacterClass {
     pub fn new() -> Self {
         Self {
-            negated: false,
-            singles: Vec::new(),
-            ranges: Vec::new(),
+            chars: HashSet::new(),
+            negated: false
         }
     }
 
-    pub fn negated(mut self) -> Self {
-        self.negated = true;
-        self
+    pub fn all() -> HashSet<char> {
+        let mut chars = HashSet::with_capacity(127);
+
+        for char in 0..=127_u8 {
+            chars.insert(char as char);
+        }
+
+        chars
+    }
+
+    pub fn add_all(tokens: &mut VecDeque<RegexType>) {
+        let chars = Self::all();
+
+        let class = Self {
+            chars,
+            negated: false
+        };
+
+        class.push_into_tokens(tokens);
     }
 
     pub fn add_char(&mut self, c: char) {
-        // Only add if not already in a range or singles
-        if !self.contains_char(&c) {
-            self.singles.push(c);
+        if self.chars.contains(&c) == false {
+            self.chars.insert(c);
         }
     }
 
     // Private method to remove a character from singles
     fn remove_char(&mut self, c: char) {
-        if let Some(index) = self.singles.iter().position(|&x| x == c) {
-            self.singles.swap_remove(index);
-        }
+        self.chars.remove(&c);
     }
 
-    pub fn add_range(&mut self, start: char, end: char) {
-        // Validate the range
+    pub fn add_range(&mut self, start: char, end: char) -> ParsingResult<()> {
         if start <= end {
-            // Check for overlaps with existing ranges
-            if !self.ranges.iter().any(|(s, e)| *s <= start && end <= *e) {
-                self.ranges.push((start, end));
+            for c in start..=end {
+                self.chars.insert(c);
             }
-        }
-    }
 
-    // Check if a character is contained in this class
-    pub fn contains_char(&self, c: &char) -> bool {
-        self.singles.contains(c)
-            || self
-                .ranges
-                .iter()
-                .any(|(start, end)| start <= c && c <= end)
-    }
-
-    // Check if a character matches this class (considering negation)
-    pub fn matches(&self, c: &char) -> bool {
-        let contains = self.contains_char(c);
-        if self.negated {
-            !contains
+            Ok(())
         } else {
-            contains
+            Err(ParsingError::unrecognized_rule().because("negative range in character class"))
         }
     }
 
-    // Constructor for a single character class
-    pub fn single(c: char) -> Self {
-        let mut class = Self::new();
-        class.add_char(c);
-        class
-    }
+    pub fn push_into_tokens(self, tokens: &mut VecDeque<RegexType>) {
+        let chars = if self.negated == true {
+            let mut chars = Self::all();
 
-    // Constructor for a range class
-    pub fn range(start: char, end: char) -> Self {
-        let mut class = Self::new();
-        class.add_range(start, end);
-        class
-    }
-
-    // Merge two character classes
-    pub fn merge(&mut self, other: &CharacterClass) {
-        // Only merge non-negated classes
-        if !other.negated {
-            // Add all singles from other
-            for &c in &other.singles {
-                self.add_char(c);
+            for c in self.chars {
+                chars.remove(&c);
             }
 
-            // Add all ranges from other
-            for &(start, end) in &other.ranges {
-                self.add_range(start, end);
-            }
+            chars
+        } else {
+            self.chars
+        };
+
+        if chars.len() < 1 {
+            return
         }
+
+        tokens.push_back(RegexType::OpenParenthesis);
+
+        for c in chars {
+            tokens.push_back(RegexType::Char(c));
+
+            tokens.push_back(RegexType::Or);            
+        }
+        tokens.pop_back();
+
+        tokens.push_back(RegexType::CloseParenthesis);
     }
 
     // Parse a character class from a string
     pub fn parse(chars: &mut std::str::Chars) -> ParsingResult<Self> {
         let mut class = Self::new();
-        let mut negated = false;
         let mut prev_char: Option<char> = None;
 
         // Check for negation
         if let Some('^') = chars.clone().next() {
-            negated = true;
+            class.negated = true;
             chars.next(); // Consume the '^'
         }
 
         while let Some(c) = chars.next() {
             match c {
                 ']' => {
-                    if negated {
-                        class = class.negated();
-                    }
                     return Ok(class);
                 }
                 '-' => {
@@ -365,6 +346,7 @@ impl CharacterClass {
                             .because("Escape sequence at end of character class"));
                     }
                 }
+
                 c => {
                     class.add_char(c);
                     prev_char = Some(c);
@@ -415,6 +397,11 @@ impl CharacterClass {
         class
     }
 
+    pub fn negated(mut self) -> Self {
+        self.negated = true;
+        self
+    }
+
     pub fn non_digit() -> Self {
         Self::digit().negated()
     }
@@ -443,28 +430,6 @@ impl CharacterClass {
 
     pub fn non_whitespace() -> Self {
         Self::whitespace().negated()
-    }
-}
-
-impl fmt::Display for CharacterClass {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-
-        if self.negated {
-            write!(f, "^")?;
-        }
-
-        // Print individual characters
-        for &c in &self.singles {
-            write!(f, "{}", c)?;
-        }
-
-        // Print ranges
-        for &(start, end) in &self.ranges {
-            write!(f, "{}-{}", start, end)?;
-        }
-
-        write!(f, "]")
     }
 }
 
@@ -526,11 +491,34 @@ impl Regex {
                 '"' => Self::add_string(&mut tokens, &mut chars)?,
                 '[' => Self::add_character_class(&mut tokens, &mut chars)?,
                 '{' => Self::add_quantifier(&mut tokens, &mut chars)?,
-                c => tokens.push_back(Self::into_type(c, &mut chars)),
+                '\\' => Self::add_backslash(&mut tokens, &mut chars),
+                '*' => CharacterClass::add_all(&mut tokens),
+
+                c => tokens.push_back(Self::into_type(c)),
             }
         }
 
         Ok(tokens)
+    }
+
+    pub fn add_backslash(
+        tokens: &mut VecDeque<RegexType>,
+        chars: &mut Chars<'_>,
+    ) {
+        let next_c = chars.next().unwrap_or('\\');
+
+        // Check if it's a shorthand character class
+        match next_c {
+            'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
+                if let Ok(class) = CharacterClass::from_shorthand(next_c) {
+                    class.push_into_tokens(tokens);
+                } else {
+                    tokens.push_back(RegexType::Char(Utils::backslashed(next_c)));
+                }
+            }
+            // Handle other escape sequences
+            _ => tokens.push_back(RegexType::Char(Utils::backslashed(next_c))),
+        }
     }
 
     /// Handling litterals (trick: transform litterals into parenthesis of chars)
@@ -568,7 +556,7 @@ impl Regex {
         chars: &mut Chars<'_>,
     ) -> ParsingResult<()> {
         let class = CharacterClass::parse(chars)?;
-        tokens.push_back(RegexType::Class(class));
+        class.push_into_tokens(tokens);
         Ok(())
     }
 
@@ -636,11 +624,9 @@ impl Regex {
         Err(ParsingError::unrecognized_rule().because("Unclosed quantifier"))
     }
 
-    pub fn into_type(c: char, chars: &mut Chars<'_>) -> RegexType {
+    pub fn into_type(c: char) -> RegexType {
         match c {
             '*' => RegexType::Quant(Quantifier::AtLeast(0)),
-
-            '.' => RegexType::Any,
 
             '+' => RegexType::Quant(Quantifier::AtLeast(1)),
 
@@ -655,23 +641,6 @@ impl Regex {
             '?' => RegexType::Quant(Quantifier::Range(0, 1)),
 
             '|' => RegexType::Or,
-
-            '\\' => {
-                let next_c = chars.next().unwrap_or('\\');
-
-                // Check if it's a shorthand character class
-                match next_c {
-                    'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
-                        if let Ok(class) = CharacterClass::from_shorthand(next_c) {
-                            RegexType::Class(class)
-                        } else {
-                            RegexType::Char(Utils::backslashed(next_c))
-                        }
-                    }
-                    // Handle other escape sequences
-                    _ => RegexType::Char(Utils::backslashed(next_c)),
-                }
-            }
 
             c => RegexType::Char(c),
         }
