@@ -29,6 +29,8 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 
 <COMMENT>"/a..d"         { BEGIN(COMMENT); }
 
+a{0, 10000}{0, 10000} ;
+
 .. printf("HAHAHA\n");
 (.+|a) printf("BABABA\n");
 

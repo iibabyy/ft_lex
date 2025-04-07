@@ -1,9 +1,5 @@
 use std::{
-    cell::{RefCell, UnsafeCell},
-    fmt,
-    ops::{Deref, DerefMut},
-    rc::{Rc, Weak},
-    collections::HashMap,
+    cell::{RefCell, UnsafeCell}, collections::HashMap, fmt, hash::Hash, ops::{Deref, DerefMut}, rc::{Rc, Weak}
 };
 
 use super::*;
@@ -321,6 +317,7 @@ impl State {
             _ => false,
         }
     }
+
 }
 
 impl Fragment {

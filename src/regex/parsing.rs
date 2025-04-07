@@ -8,7 +8,7 @@ use crate::*;
 // 1. TYPE DEFINITIONS
 // ==============================================
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RegexType {
     Char(char),
     LineStart,
@@ -23,7 +23,7 @@ pub enum RegexType {
 }
 
 // Wrapper for RegexType to be used in the conversion to postfix
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum TokenType {
     Literal(RegexType),
     OpenParenthesis(RegexType),
@@ -33,7 +33,7 @@ pub enum TokenType {
     StartOrEndCondition(RegexType),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CharacterClass {
     // Whether this is a negated class [^...]
     negated: bool,
@@ -43,7 +43,7 @@ pub struct CharacterClass {
     ranges: Vec<(char, char)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Quantifier {
     // {n}
     Exact(usize),

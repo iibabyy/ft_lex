@@ -10,6 +10,9 @@ pub use post2nfa::*;
 pub mod nfa_simulation;
 pub use nfa_simulation::*;
 
+pub mod dfa;
+pub use dfa::*;
+
 use std::{collections::VecDeque, fmt, ops, str::Chars};
 
 use super::*;

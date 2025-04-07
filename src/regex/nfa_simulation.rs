@@ -1,6 +1,7 @@
-use std::{iter::Peekable, ops::Deref, rc::Rc, collections::HashSet};
+use std::{collections::HashSet, hash::Hash, iter::Peekable, ops::Deref, rc::Rc};
 
 use super::*;
+
 // ===================================
 // 1. DATA STRUCTURES FOR NFA SIMULATION
 // ===================================
@@ -10,6 +11,41 @@ use super::*;
 pub struct StateList {
     states: Vec<StatePtr>,
 }
+
+impl Clone for StateList {
+	fn clone(&self) -> Self {
+		let cloned_states = self.states.iter().map(|state| Rc::clone(state)).collect();
+
+		StateList {
+			states: cloned_states
+		}
+	}
+}
+
+impl Eq for StateList {}
+impl PartialEq for StateList {
+	fn eq(&self, other: &Self) -> bool {
+		
+		if self.states.len() != other.states.len() {
+			return false
+		}
+
+		let mut my_states = self.states.iter();
+		let mut other_states = other.states.iter();
+
+		while let Some(my_state) = my_states.next() {
+			let other_state = other_states.next().unwrap();
+
+			if Rc::ptr_eq(my_state, other_state) == false {
+				return false;
+			}
+		}
+
+		true
+	}
+}
+
+
 
 impl StateList {
 	pub fn new() -> Self {
