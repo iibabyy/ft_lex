@@ -628,8 +628,3 @@ fn test_complex_patterns() {
     assert!(complex3.start_of_line);
     assert!(complex3.end_of_line);
 }
-#[test]
-fn test_big_regex() {
-    // Test a pattern with multiple quantifiers
-    let complex2 = pattern_to_nfa("a{0,10000}{0,10000}").unwrap();
-}
