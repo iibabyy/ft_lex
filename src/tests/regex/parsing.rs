@@ -973,3 +973,148 @@ fn test_escape_sequences_in_character_class() {
 	assert!(class.contains(&'\r'));
 	assert!(class.contains(&'\t'));
 }
+
+// ==============================================
+// 2. COMPLEX REGEX PARSING TESTS
+// ==============================================
+
+#[test]
+fn test_complex_nested_groups() {
+    // Test deeply nested parentheses with alternation and quantifiers
+    let result = Regex::tokens("(a(b|c)*(d(e|f)+g)?)+").unwrap();
+    
+    // Verify structure without checking every token
+    assert!(result.len() > 15);
+    assert_eq!(result[0], RegexType::OpenParenthesis);
+    
+    // Find and verify some key elements
+    let has_alternation = result.iter().any(|t| *t == RegexType::Or);
+    let has_star = result.iter().any(|t| *t == RegexType::Quant(Quantifier::AtLeast(0)));
+    let has_plus = result.iter().any(|t| *t == RegexType::Quant(Quantifier::AtLeast(1)));
+    let has_question = result.iter().any(|t| *t == RegexType::Quant(Quantifier::Range(0, 1)));
+    
+    assert!(has_alternation);
+    assert!(has_star);
+    assert!(has_plus);
+    assert!(has_question);
+}
+
+#[test]
+fn test_complex_character_class_with_escapes_and_ranges() {
+    // Test character class with ranges, escapes, and negation
+    let result = Regex::tokens("[^a-z0-9\\n\\t\\-\\[\\]\\\\]").unwrap();
+    
+    // Verify the structure of the tokens
+    // For character classes, tokens() should create a structure like (c1|c2|c3|...)
+    // with alternation between all possible characters
+    
+    // First token should be open parenthesis
+    assert_eq!(result[0], RegexType::OpenParenthesis);
+    
+    // Check for alternation operators between characters
+    let or_count = result.iter().filter(|&t| *t == RegexType::Or).count();
+    
+    // Verify we have multiple characters with Or operators between them
+    assert!(or_count > 0);
+    
+    // Last token should be close parenthesis
+    assert_eq!(result[result.len() - 1], RegexType::CloseParenthesis);
+    
+    // Create and test the actual character class behavior
+    let class = CharacterClass::parse(&mut "^a-z0-9\\n\\t\\-\\[\\]\\\\]".chars()).unwrap();
+    
+    // Test negation behavior
+    assert!(!class.contains(&'a'));
+    assert!(!class.contains(&'z'));
+    assert!(!class.contains(&'5'));
+    assert!(!class.contains(&'\n'));
+    assert!(!class.contains(&'\t'));
+    assert!(!class.contains(&'-'));
+    assert!(!class.contains(&'['));
+    assert!(!class.contains(&']'));
+    assert!(!class.contains(&'\\'));
+    
+    // Test characters that should be included
+    assert!(class.contains(&'A'));
+    assert!(class.contains(&'Z'));
+    assert!(class.contains(&'!'));
+    assert!(class.contains(&' '));
+}
+
+#[test]
+fn test_complex_quantifiers() {
+    // Test various complex quantifier combinations
+    let result = Regex::tokens("a{2,5}b{3}c{1,}d?e*f+").unwrap();
+    
+    // Verify all quantifiers are correctly parsed
+    let mut found_quantifiers = 0;
+    for token in &result {
+        match token {
+			RegexType::Quant(Quantifier::Range(0, 1)) => found_quantifiers += 1,
+            RegexType::Quant(Quantifier::Range(min, max)) => {
+                if *min == 2 && *max == 5 { found_quantifiers += 1; }
+            },
+            RegexType::Quant(Quantifier::Exact(n)) => {
+                if *n == 3 { found_quantifiers += 1; }
+            },
+            RegexType::Quant(Quantifier::AtLeast(0)) => found_quantifiers += 1,
+            RegexType::Quant(Quantifier::AtLeast(1)) => found_quantifiers += 1,
+            _ => {}
+        }
+    }
+    
+    assert_eq!(found_quantifiers, 6);
+}
+
+#[test]
+fn test_complex_anchors_and_escapes() {
+    // Test line anchors with escaped metacharacters
+    let result = Regex::tokens("^\\(\\[\\{\\*\\+\\?\\|\\\\\\$\\}\\]\\)$").unwrap();
+    
+    // Verify anchors
+    assert_eq!(result[0], RegexType::LineStart);
+    assert_eq!(result[result.len()-1], RegexType::LineEnd);
+    
+    // Verify escaped metacharacters
+    let expected_chars = ['(', '[', '{', '*', '+', '?', '|', '\\', '$', '}', ']', ')'];
+    let mut char_index = 0;
+    
+    for i in 1..result.len()-1 {
+        if let RegexType::Char(c) = result[i] {
+            assert_eq!(c, expected_chars[char_index], "Mismatch at index {}", i);
+            char_index += 1;
+        }
+    }
+    
+    assert_eq!(char_index, expected_chars.len());
+}
+
+#[test]
+fn test_pathological_regex() {
+    // Test a pathologically complex regex that combines many features
+    let pattern = "^(([a-z]+)|(\\d{1,3})|(\\w+\\-[0-9]+))+[^\\s\\d]?\\\\\\$\\d+(\\.\\d{2})?$";
+    let result = Regex::tokens(pattern).unwrap();
+    
+    // Basic structure verification
+    assert!(result.len() > 30);
+    assert_eq!(result[0], RegexType::LineStart);
+    assert_eq!(result[result.len()-1], RegexType::LineEnd);
+    
+    // Count groups, alternations, and quantifiers
+    let group_count = result.iter().filter(|&t| *t == RegexType::OpenParenthesis).count();
+    let alternation_count = result.iter().filter(|&t| *t == RegexType::Or).count();
+    let quantifier_count = result.iter().filter(|&t| 
+        matches!(t, RegexType::Quant(_))
+    ).count();
+    
+    assert!(group_count >= 5);
+    assert!(alternation_count >= 3);
+    assert!(quantifier_count >= 4);
+    
+    // Verify we have character classes
+    let has_char_class = result.iter().any(|t| 
+        matches!(t, RegexType::Char('a'))
+    );
+    
+    assert!(has_char_class);
+}
