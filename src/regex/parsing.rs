@@ -34,7 +34,7 @@ pub enum TokenType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterClass {
     // Individual characters in the class
-    pub chars: HashSet<char>,
+    pub chars: Vec<char>,
     pub negated: bool
 }
 
@@ -226,16 +226,16 @@ impl From<RegexType> for TokenType {
 impl CharacterClass {
     pub fn new() -> Self {
         Self {
-            chars: HashSet::new(),
+            chars: Vec::new(),
             negated: false
         }
     }
 
-    pub fn all() -> HashSet<char> {
-        let mut chars = HashSet::with_capacity(127);
+    pub fn all() -> Vec<char> {
+        let mut chars = Vec::with_capacity(127);
 
         for char in 0..=127_u8 {
-            chars.insert(char as char);
+            chars.push(char as char);
         }
 
         chars
@@ -254,19 +254,28 @@ impl CharacterClass {
 
     pub fn add_char(&mut self, c: char) {
         if self.chars.contains(&c) == false {
-            self.chars.insert(c);
+            self.chars.push(c);
         }
     }
 
     // Private method to remove a character from singles
     fn remove_char(&mut self, c: char) {
-        self.chars.remove(&c);
+		let search = self.chars
+			.iter()
+			.enumerate()
+			.find_map(|(index, char)|
+				(char == &c).then_some(index)
+			);
+
+        if let Some(index) = search {
+			self.chars.remove(index);
+		}
     }
 
     pub fn add_range(&mut self, start: char, end: char) -> ParsingResult<()> {
         if start <= end {
             for c in start..=end {
-                self.chars.insert(c);
+                self.add_char(c);
             }
 
             Ok(())
@@ -280,7 +289,16 @@ impl CharacterClass {
             let mut chars = Self::all();
 
             for c in self.chars {
-                chars.remove(&c);
+                let search = chars
+					.iter()
+					.enumerate()
+					.find_map(|(index, char)|
+						(char == &c).then_some(index)
+					);
+
+				if let Some(index) = search {
+					chars.remove(index);
+				}
             }
 
             chars
@@ -402,7 +420,7 @@ impl CharacterClass {
     // Predefined character classes
     pub fn digit() -> Self {
         let mut class = Self::new();
-        class.add_range('0', '9');
+        let _ = class.add_range('0', '9');
         class
     }
 
@@ -417,9 +435,9 @@ impl CharacterClass {
 
     pub fn word_char() -> Self {
         let mut class = Self::new();
-        class.add_range('a', 'z');
-        class.add_range('A', 'Z');
-        class.add_range('0', '9');
+        let _ = class.add_range('a', 'z');
+        let _ = class.add_range('A', 'Z');
+        let _ = class.add_range('0', '9');
         class.add_char('_');
         class
     }
