@@ -299,10 +299,10 @@ impl State {
 
     /// Needed for reusing the same fragment (e.g repeting a fragment)
     fn self_ptr_deep_clone(&self) -> (StatePtr, Vec<VarStatePtr>) {
-        Self::self_ptr_deep_clone_with_memo(self, &mut HashMap::new())
+        Self::self_ptr_deep_clone_with_memo_iterative(self, &mut HashMap::new())
     }
     
-    fn self_ptr_deep_clone_with_memo(
+    pub fn self_ptr_deep_clone_with_memo(
         &self, 
         memo: &mut HashMap<*const State, StatePtr>
     ) -> (StatePtr, Vec<VarStatePtr>) {
@@ -410,7 +410,7 @@ impl State {
         }
         
         let state_ref = state.borrow();
-        state_ref.self_ptr_deep_clone_with_memo(memo)
+        state_ref.self_ptr_deep_clone_with_memo_iterative(memo)
     }
 
     pub fn matche_with(&self, c: &char) -> bool {
@@ -424,7 +424,7 @@ impl State {
 }
 
 impl State {
-	fn self_ptr_deep_clone_with_memo_iterative(
+	pub fn self_ptr_deep_clone_with_memo_iterative(
 		&self, 
 		memo: &mut HashMap<*const State, StatePtr>
 	) -> (StatePtr, Vec<VarStatePtr>) {
@@ -688,30 +688,31 @@ impl State {
 	
 	// Helper function to update a parent state's outgoing pointers
 	fn update_parent_pointer(parent: &StatePtr, child: StatePtr, is_first_out: bool) {
-		match &*parent.borrow() {
-			State::Basic(_) => {
-				parent.borrow_mut().into_basic().unwrap().out.replace(child);
-			},
-			State::Split(_) => {
-				if is_first_out {
-					parent.borrow_mut().into_split().unwrap().out1.replace(child);
-				} else {
-					parent.borrow_mut().into_split().unwrap().out2.replace(child);
-				}
-			},
-			State::StartOfLine { .. } => {
-				if let Some(out) = parent.borrow().start_of_line_out() {
-					out.replace(child);
-				}
-			},
-			State::EndOfLine { .. } => {
-				if let Some(out) = parent.borrow().end_of_line_out() {
-					out.replace(child);
-				}
-			},
-			_ => { /* No outgoing pointers to update */ }
+		let parent_ref = parent.borrow();
+		
+		if let Some(_) = parent_ref.into_basic() {
+			drop(parent_ref); // Release the immutable borrow
+			parent.borrow_mut().into_basic().unwrap().out.replace(child);
+		} else if let Some(_) = parent_ref.into_split() {
+			drop(parent_ref); // Release the immutable borrow
+			if is_first_out {
+				parent.borrow_mut().into_split().unwrap().out1.replace(child);
+			} else {
+				parent.borrow_mut().into_split().unwrap().out2.replace(child);
+			}
+		} else if parent_ref.is_start_of_line() {
+			if let Some(out) = parent_ref.start_of_line_out() {
+				out.replace(child);
+			}
+		} else if parent_ref.is_end_of_line() {
+			if let Some(out) = parent_ref.end_of_line_out() {
+				out.replace(child);
+			}
 		}
+		// No else case needed - no outgoing pointers to update for other state types
 	}
+
+
 }
 
 impl Fragment {

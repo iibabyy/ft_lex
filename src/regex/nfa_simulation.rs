@@ -74,7 +74,7 @@ impl StateList {
         self.add_state_with_memo(state, &mut HashSet::new());
     }
 
-    fn add_state_with_memo(&mut self, state: &StatePtr, visited: &mut HashSet<*const State>) {
+    pub fn add_state_with_memo(&mut self, state: &StatePtr, visited: &mut HashSet<*const State>) {
         let state_ptr = state.borrow().deref() as *const State;
 
         if visited.insert(state_ptr) == false {
@@ -97,6 +97,33 @@ impl StateList {
             self.push(state);
         }
     }
+
+	pub fn add_state_with_memo_iterative(&mut self, state: &StatePtr, visited: &mut HashSet<*const State>) {
+		let mut work_stack = Vec::new();
+		work_stack.push(Rc::clone(state));
+		
+		while let Some(current) = work_stack.pop() {
+			let state_ptr = current.borrow().deref() as *const State;
+			
+			if visited.insert(state_ptr) == false {
+				continue;
+			}
+			
+			if self.contains(&current) {
+				continue;
+			}
+
+			if State::is_split_ptr(&current) {
+				let borrowed_state = current.borrow();
+				let split = borrowed_state.into_split().unwrap();
+				
+				work_stack.push(Rc::clone(&split.out1.borrow()));
+				work_stack.push(Rc::clone(&split.out2.borrow()));
+			} else {
+				self.push(&current);
+			}
+		}
+	}
 
 	pub fn contains(&self, to_find: &StatePtr) -> bool {
 		self.states
