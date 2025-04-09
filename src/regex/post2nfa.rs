@@ -30,6 +30,8 @@ pub enum State {
     NoMatch,
     Match,
     None,
+    StartOfLine{ out: VarStatePtr },
+    EndOfLine{ out: VarStatePtr },
 }
 
 pub struct BasicState {
@@ -89,6 +91,18 @@ impl State {
         state_ptr(State::None)
     }
 
+    pub fn start_of_line() -> StatePtr {
+        state_ptr(State::StartOfLine {
+            out: var_state_ptr(State::none()),
+        })
+    }
+
+    pub fn end_of_line() -> StatePtr {
+        state_ptr(State::EndOfLine {
+            out: var_state_ptr(State::none()),
+        })
+    }
+
     pub fn is_none(&self) -> bool {
         matches!(self, State::None)
     }
@@ -107,6 +121,14 @@ impl State {
 
     pub fn is_nomatch(&self) -> bool {
         matches!(self, State::NoMatch)
+    }
+
+    pub fn is_start_of_line(&self) -> bool {
+        matches!(self, State::StartOfLine { .. })
+    }
+
+    pub fn is_end_of_line(&self) -> bool {
+        matches!(self, State::EndOfLine { .. })
     }
 
     pub fn is_basic_ptr(ptr: &StatePtr) -> bool {
@@ -129,6 +151,14 @@ impl State {
         ptr.borrow().is_nomatch()
     }
 
+    pub fn is_start_of_line_ptr(ptr: &StatePtr) -> bool {
+        ptr.borrow().is_start_of_line()
+    }
+
+    pub fn is_end_of_line_ptr(ptr: &StatePtr) -> bool {
+        ptr.borrow().is_end_of_line()
+    }
+
     pub fn is_basic_var_ptr(ptr: &VarStatePtr) -> bool {
         ptr.borrow().borrow().is_basic()
     }
@@ -149,12 +179,36 @@ impl State {
         ptr.borrow().borrow().is_nomatch()
     }
 
+    pub fn is_start_of_line_var_ptr(ptr: &VarStatePtr) -> bool {
+        ptr.borrow().borrow().is_start_of_line()
+    }
+
+    pub fn is_end_of_line_var_ptr(ptr: &VarStatePtr) -> bool {
+        ptr.borrow().borrow().is_end_of_line()
+    }
+
     pub fn from_ptr(ptr: &StatePtr) -> std::cell::Ref<'_, Self> {
         ptr.borrow()
     }
 
     pub fn deref_var_ptr(ptr: &VarStatePtr) -> std::cell::Ref<'_, StatePtr> {
         ptr.borrow()
+    }
+
+    pub fn start_of_line_out(&self) -> Option<VarStatePtr> {
+        match self {
+            State::StartOfLine { out } => Some(Rc::clone(out)),
+            
+            _ => None,
+        }
+    }
+    
+    pub fn end_of_line_out(&self) -> Option<VarStatePtr> {
+        match self {
+            State::EndOfLine { out } => Some(Rc::clone(out)),
+            
+            _ => None,
+        }
     }
 
     pub fn basic_out(&self) -> Option<VarStatePtr> {
@@ -275,6 +329,22 @@ impl State {
             State::NoMatch => (State::no_match(), vec![]),
 
             State::None => (State::none(), vec![]),
+
+            State::EndOfLine { out } => {
+                let (cloned_out, ptr_list) = Self::deep_clone_with_memo(&out.borrow(), memo);
+
+                let cloned_state = state_ptr(State::EndOfLine { out: var_state_ptr(cloned_out) });
+
+                (cloned_state, ptr_list)
+            }
+            
+            State::StartOfLine { out } => {
+                let (cloned_out, ptr_list) = Self::deep_clone_with_memo(&out.borrow(), memo);
+
+                let cloned_state = state_ptr(State::StartOfLine { out: var_state_ptr(cloned_out) });
+
+                (cloned_state, ptr_list)
+            }
         }
     }
 
@@ -308,6 +378,20 @@ impl Fragment {
     pub fn new(start: StatePtr, ptr_list: Vec<VarStatePtr>) -> Self {
         Self { start, ptr_list }
     }
+
+	pub fn start_of_line(self) -> Self {
+		let start = State::start_of_line();
+		let out = start.borrow().start_of_line_out().unwrap();
+		
+		Fragment::new(start, vec![out]).and(self)
+	}
+
+	pub fn end_of_line(self) -> Self {
+		let start = State::end_of_line();
+		let out = start.borrow().end_of_line_out().unwrap();
+
+		self.and(Fragment::new(start, vec![out]))
+	}
 
     pub fn basic(start: StatePtr) -> Self {
         let ptr = start.borrow().basic_out().unwrap();
@@ -524,6 +608,28 @@ impl fmt::Display for State {
                     .then_some("...")
                     .unwrap_or("None")
             ),
+            
+            State::StartOfLine { out } => write!(
+                f,
+                "StartOfLine({})",
+                out
+                    .borrow()
+                    .borrow()
+                    .is_none()
+                    .then_some("...")
+                    .unwrap_or("None")
+            ),
+            
+            State::EndOfLine { out } => write!(
+                f,
+                "EndOfLine({})",
+                out
+                    .borrow()
+                    .borrow()
+                    .is_none()
+                    .then_some("...")
+                    .unwrap_or("None")
+            ),
         }
     }
 }
@@ -579,12 +685,13 @@ impl fmt::Debug for SplitState {
 // =============================
 
 /// This function implements Thompson's construction algorithm to convert the postfix regex to an NFA
-pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
+pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 	if postfix.is_empty() {
 		return Err(ParsingError::unrecognized_rule());
 	}
 
-    let mut nfa = Nfa::new();
+	let mut start_of_line = false;
+	let mut end_of_line = false;
     let mut fragments: Vec<Fragment> = vec![];
 
     while let Some(token) = postfix.pop_front() {
@@ -618,21 +725,21 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
 			}
 
             RegexType::LineEnd => {
-                if nfa.end_of_line == true || postfix.front().is_some() {
+                if end_of_line == true || postfix.front().is_some() {
                     return Err(ParsingError::unrecognized_rule()
                         .because("unexpected '$' special character"));
                 }
 
-                nfa.end_of_line = true;
+                end_of_line = true;
             }
 
             RegexType::LineStart => {
-                if nfa.start_of_line == true || fragments.last().is_some() {
+                if start_of_line == true || fragments.last().is_some() {
                     return Err(ParsingError::unrecognized_rule()
                         .because("unexpected '^' special character"));
                 }
 
-                nfa.start_of_line = true;
+                start_of_line = true;
             }
 
             c => {
@@ -645,24 +752,35 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<Nfa> {
         }
     }
 
-    if fragments.len() != 1 {
-		if !nfa.start_of_line && !nfa.end_of_line {
+	if fragments.len() > 1 {
+		return Err(ParsingError::unrecognized_rule());
+	} else if fragments.len() == 0 {
+		if !start_of_line && !end_of_line {
 			return Err(ParsingError::unrecognized_rule());
 		}
 
+		// Only start/end conditions
+		// (remove if start/end conditions whitout pattern are forbidden)
 		fragments.push(Fragment::new(State::match_(), vec![]));
     }
 
-    let e = fragments.pop().unwrap();
-    utils::last_patch(&e.ptr_list);
+    let mut e = fragments.pop().unwrap();
 
     if State::is_none_ptr(&e.start) {
         return Err(ParsingError::unrecognized_rule());
     }
 
-    nfa.start = e.start;
+	if start_of_line {
+		e = e.start_of_line();
+	}
 
-	Ok(nfa)
+	if end_of_line {
+		e = e.end_of_line();
+	}
+
+    utils::last_patch(&e.ptr_list);
+
+	Ok(e.start)
 }
 
 // 4. UTILITY FUNCTIONS

@@ -30,15 +30,15 @@ pub struct Regex {
 // ==============================
 
 impl Regex {
-    pub fn new(expr: String) -> ParsingResult<Nfa> {
+    pub fn new(expr: String) -> ParsingResult<StatePtr> {
         let tokens = Self::tokens(&expr)?;
 
         let tokens_with_concatenation = Self::add_concatenation(tokens);
 
         let postfix = re2post(tokens_with_concatenation)?;
 
-		let nfa = post2nfa(postfix)?;
+		let start = post2nfa(postfix)?;
 
-        Ok(nfa)
+        Ok(start)
     }
 }
