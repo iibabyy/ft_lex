@@ -32,9 +32,9 @@ pub enum InputCondition {
 }
 
 pub struct Dfa {
-	start: DfaStatePtr,
+	pub start: DfaStatePtr,
 
-	memory: HashMap<StateList, DfaStatePtr>,
+	pub memory: HashMap<StateList, DfaStatePtr>,
 }
 
 impl Dfa {
@@ -58,13 +58,13 @@ impl Dfa {
 }
 
 pub struct DfaState {
-	id: usize,
+	pub id: usize,
 
-	states: StateList,
+	pub states: StateList,
 
-	matchs: StateList,
+	pub matchs: StateList,
 
-	next: HashMap<InputCondition, StateList>,
+	pub next: HashMap<InputCondition, StateList>,
 }
 
 impl DfaState {

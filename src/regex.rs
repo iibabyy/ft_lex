@@ -13,6 +13,9 @@ pub use nfa_simulation::*;
 pub mod dfa;
 pub use dfa::*;
 
+pub mod dfa_simulation;
+pub use dfa_simulation::*;
+
 use std::{collections::VecDeque, fmt, ops, str::Chars};
 
 use super::*;
