@@ -3,7 +3,7 @@ use super::*;
 
 pub type ListPtr = Rc<StateList>;
 pub type DfaStatePtr = Rc<DfaState>;
-
+pub type DfaMemory = MutPtr<HashMap<StateList, DfaStatePtr>>;
 pub fn ptr_list(list: StateList) -> ListPtr {
 	Rc::new(list)
 }
@@ -47,37 +47,24 @@ pub enum InputCondition {
 pub struct Dfa {
 	start: DfaStatePtr,
 
-	states: DfaStates,
+	memory: HashMap<StateList, DfaStatePtr>,
 }
 
 impl Dfa {
 	pub fn new(start: StatePtr) -> Self {
 		Dfa {
 			start: ptr_state(DfaState::new(0, &ptr_list(StateList::from(&start)))),
-			states: DfaStates::new(),
-		}
-	}
-}
-
-pub struct DfaStates {
-	states: HashMap<ListPtr, DfaStatePtr>,
-}
-
-impl DfaStates {
-	pub fn new() -> Self {
-		DfaStates {
-			states: HashMap::new(),
+			memory: HashMap::new(),
 		}
 	}
 
-	pub fn add_state(&mut self, state: StatePtr) {
-		let list = ptr_list(StateList::from(&state));
-		let state = ptr_state(DfaState::new(self.states.len(), &list));
-		self.states.insert(list, state);
+	pub fn add_state(&mut self, state: &DfaStatePtr) {
+		let list = state.states.clone();
+		self.memory.insert(list, state.clone());
 	}
 
-	pub fn get_state(&self, list: &ListPtr) -> Option<&DfaStatePtr> {
-		self.states.get(list)
+	pub fn get_state(&self, list: &StateList) -> Option<&DfaStatePtr> {
+		self.memory.get(list)
 	}
 }
 
@@ -85,7 +72,7 @@ impl DfaStates {
 pub struct DfaState {
 	id: usize,
 
-	states: ListPtr,
+	states: StateList,
 
 	matchs: StateList,
 
@@ -93,10 +80,10 @@ pub struct DfaState {
 }
 
 impl DfaState {
-	pub fn new(id: usize, states: &ListPtr) -> Self {
+	pub fn new(id: usize, states: &StateList) -> Self {
 		DfaState {
 			id,
-			states: Rc::clone(states),
+			states: states.clone(),
 			matchs: StateList::new(),
 			next: HashMap::new(),
 		}
@@ -108,7 +95,7 @@ impl DfaState {
 
 	pub fn compute_next(&mut self) {
 		for state in self.states.iter() {
-			let (next_states, matchs) = DfaState::find_next(state);
+			let (next_states, matchs) = DfaState::find_next(state, &mut self.memory);
 			merge_input_maps(&mut self.next, next_states);
 			self.matchs.merge(matchs);
 		}
@@ -128,7 +115,7 @@ impl DfaState {
 	/// A tuple containing:
 	/// * A HashMap mapping input conditions to the states reachable under those conditions
 	/// * A StateList containing any match states encountered
-	pub fn find_next(state: &StatePtr) -> (HashMap<InputCondition, StateList>, StateList) {
+	pub fn find_next(state: &StatePtr, memory: &mut HashMap<StateList, DfaStatePtr>) -> (HashMap<InputCondition, StateList>, StateList) {
 		let mut next_states: HashMap<InputCondition, StateList> = HashMap::new();
 		let mut matchs: StateList = StateList::new();
 
@@ -140,8 +127,8 @@ impl DfaState {
 			},
 
 			State::Split(split) => {
-				let (next_states_1, matchs_1) = DfaState::find_next(&*State::deref_var_ptr(&split.out1));
-				let (next_states_2, matchs_2) = DfaState::find_next(&*State::deref_var_ptr(&split.out2));
+				let (next_states_1, matchs_1) = DfaState::find_next(&*State::deref_var_ptr(&split.out1), memory);
+				let (next_states_2, matchs_2) = DfaState::find_next(&*State::deref_var_ptr(&split.out2), memory);
 
 				matchs.merge(matchs_1);
 				matchs.merge(matchs_2);
