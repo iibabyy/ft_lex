@@ -965,22 +965,15 @@ fn test_escape_sequences() {
 #[test]
 fn test_complex_nested_quantifiers() {
 	// Test (a+|b*){2,3}
-	// let complex_pattern = into_postfix("(a+|b*){2,3}");
+	let complex_pattern = into_postfix("(a+|b*){2,3}");
 
-	// post2nfa(complex_pattern, 0);
-
-	// // Equivalent to (a+|b*)(a+|b*) with optional third (a+|b*)
+	// Equivalent to (a+|b*)(a+|b*) with optional third (a+|b*)
 	let expanded_pattern = into_postfix("(a+|b*)(a+|b*)(a+|b*)?");
 
-	let nfa = post2nfa(expanded_pattern, 0).unwrap();
-
-	print_state_structure(&nfa, "Nfa");
-
-	// assert!(compare_nfas(
-	// 	complex_pattern,
-	// 	expanded_pattern
-	// ));
-	panic!()
+	assert!(compare_nfas(
+		complex_pattern,
+		expanded_pattern
+	));
 }
 
 #[test]

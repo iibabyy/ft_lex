@@ -880,6 +880,22 @@ impl Fragment {
         Fragment::new(s, utils::append(self.ptr_list, e2.ptr_list))
     }
 
+    /// Creates an OR operation with a None state, allowing the pattern to be skipped.
+    /// This is similar to the `or` operation but instead of branching between two fragments,
+    /// it branches between the fragment and a None state.
+    /// 
+    /// This is used in implementing optional patterns and other quantifiers where
+    /// one path needs to bypass the pattern entirely.
+    pub fn or_none(self) -> Self {
+        let s = State::split(self.start, State::none());
+        
+        let none_out = s.borrow().split_out().unwrap().1;
+        
+        let ptr_list = utils::append(self.ptr_list, utils::list1(none_out));
+        
+        Fragment::new(s, ptr_list)
+    }
+
     pub fn optional(self) -> Self {
         let s = State::split(self.start, State::none());
 
@@ -946,11 +962,11 @@ impl Fragment {
     pub fn range(self, at_least: &usize, at_most: &usize) -> Self {
         let optional_count = at_most - at_least;
 
-        if optional_count > 0 {
-            let fragment = if at_least > &0 {
-                self.deep_clone().exact_repeat(at_least)
+		if optional_count > 0 {
+			let fragment = if at_least > &0 {
+                Some(self.deep_clone().exact_repeat(at_least))
             } else {
-                self.deep_clone().optional()
+                None
             };
 
             let mut optional_part = self.deep_clone();
@@ -962,7 +978,13 @@ impl Fragment {
 
             optional_part = optional_part.optional();
 
-            fragment.and(optional_part)
+			if fragment.is_none() {
+				// at_least == 0
+				optional_part
+			} else {
+				fragment.unwrap().and(optional_part)
+			}
+
         } else if optional_count == 0 {
             return self.exact_repeat(at_least);
         } else {
