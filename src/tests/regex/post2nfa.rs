@@ -1595,5 +1595,8 @@ fn test_deep_clone_diamond_structure() {
 	let out2_match = cloned_split.out2.borrow().borrow().basic_out().unwrap();
 	
 	// Both paths should lead to the same match state
-	assert_eq!(out1_match.as_ptr(), out2_match.as_ptr());
+	// Debug both output paths to verify they point to the same match state
+	dbg!(&out1_match);
+	dbg!(&out2_match);
+	assert_eq!(Rc::ptr_eq(&*out1_match.borrow(), &*out2_match.borrow()), true);
 }

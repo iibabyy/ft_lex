@@ -744,9 +744,21 @@ impl State {
 				(state, ptr_list)
 			},
 			
-			State::Match { id } => (State::match_(*id), vec![]),
-			State::NoMatch => (State::no_match(), vec![]),
-			State::None => (State::none(), vec![]),
+			State::Match { id } => {
+				let state = State::match_(*id);
+				memo.insert(raw_ptr, Rc::clone(&state));
+				(state, vec![])
+			},
+			State::NoMatch => {
+				let state = State::no_match();
+				memo.insert(raw_ptr, Rc::clone(&state));
+				(state, vec![])
+			},
+			State::None => {
+				let state = State::none();
+				memo.insert(raw_ptr, Rc::clone(&state));
+				(state, vec![])
+			},
 			
 			State::StartOfLine { out } => {
 				let state = state_ptr(State::StartOfLine { 
