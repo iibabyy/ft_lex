@@ -423,6 +423,297 @@ impl State {
 
 }
 
+impl State {
+	fn self_ptr_deep_clone_with_memo_iterative(
+		&self, 
+		memo: &mut HashMap<*const State, StatePtr>
+	) -> (StatePtr, Vec<VarStatePtr>) {
+		// Stack for pending work (state to clone, parent reference, field to update)
+		struct WorkItem {
+			state: StatePtr,
+			cloned: Option<StatePtr>,
+			parent: Option<StatePtr>,
+			is_first_out: bool, // true = out1/out, false = out2
+		}
+		
+		let mut work_stack = Vec::new();
+		let mut result_ptr_list = Vec::new();
+		
+		// Start with the current state
+		let self_ptr = self as *const State;
+		
+		// If we've already cloned this state, return the cached clone
+		if let Some(cached_clone) = memo.get(&self_ptr) {
+			return (Rc::clone(cached_clone), vec![]);
+		}
+		
+		// Initialize result based on the type of current state
+		let (initial_result, add_to_stack) = match self {
+			State::Basic(basic) => {
+				let cloned_regex = basic.c.clone();
+				
+				// Create empty state with placeholder out pointer
+				let state = state_ptr(State::Basic(BasicState {
+					c: cloned_regex.clone(),
+					out: var_state_ptr(State::none()),
+				}));
+				
+				// Insert into memo table
+				memo.insert(self_ptr, Rc::clone(&state));
+				
+				// Add out state to work stack if it's not None
+				let out_ref = basic.out.borrow();
+				let should_add = !State::is_none_ptr(&out_ref);
+				
+				if should_add {
+					(state, true)
+				} else {
+					// If out is None, add the out pointer to result_ptr_list
+					let ptr = state.borrow().basic_out().unwrap();
+					result_ptr_list.push(ptr);
+					(state, false)
+				}
+			},
+			
+			State::Split(split) => {
+				// For split states, we need to clone both out1 and out2
+				// Create a split state with placeholder out pointers
+				let state = State::split(State::none(), State::none());
+				
+				// Insert into memo table
+				memo.insert(self_ptr, Rc::clone(&state));
+				
+				(state, true)
+			},
+			
+			State::Match => (State::match_(), false),
+			State::NoMatch => (State::no_match(), false),
+			State::None => (State::none(), false),
+			
+			State::StartOfLine { out } => {
+				let state = state_ptr(State::StartOfLine { 
+					out: var_state_ptr(State::none()) 
+				});
+				
+				memo.insert(self_ptr, Rc::clone(&state));
+				(state, true)
+			},
+			
+			State::EndOfLine { out } => {
+				let state = state_ptr(State::EndOfLine { 
+					out: var_state_ptr(State::none()) 
+				});
+				
+				memo.insert(self_ptr, Rc::clone(&state));
+				(state, true)
+			},
+		};
+		
+		// Add our initial state's outgoing states to the work stack
+		if add_to_stack {
+			match self {
+				State::Basic(basic) => {
+					let out_ref = Rc::clone(&basic.out.borrow());
+					work_stack.push(WorkItem {
+						state: out_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&initial_result)),
+						is_first_out: true,
+					});
+				},
+				
+				State::Split(split) => {
+					let out1_ref = Rc::clone(&split.out1.borrow());
+					let out2_ref = Rc::clone(&split.out2.borrow());
+					
+					work_stack.push(WorkItem {
+						state: out1_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&initial_result)),
+						is_first_out: true,
+					});
+					
+					work_stack.push(WorkItem {
+						state: out2_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&initial_result)),
+						is_first_out: false,
+					});
+				},
+				
+				State::StartOfLine { out } | State::EndOfLine { out } => {
+					let out_ref = Rc::clone(&out.borrow());
+					work_stack.push(WorkItem {
+						state: out_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&initial_result)),
+						is_first_out: true,
+					});
+				},
+				
+				_ => { /* No outgoing states to process */ }
+			}
+		}
+		
+		// Process the work stack
+		while let Some(mut work_item) = work_stack.pop() {
+			if State::is_none_ptr(&work_item.state) {
+				continue;
+			}
+			
+			let raw_ptr = work_item.state.borrow().deref() as *const State;
+			
+			// Check if we've already cloned this state
+			if let Some(cached_clone) = memo.get(&raw_ptr) {
+				// Update parent pointer
+				if let Some(parent) = &work_item.parent {
+					State::update_parent_pointer(parent, Rc::clone(cached_clone), work_item.is_first_out);
+				}
+				continue;
+			}
+			
+			// Clone current state
+			let state_ref = &*work_item.state.borrow();
+			let (new_state, mut child_items) = match state_ref {
+				State::Basic(basic) => {
+					let cloned_regex = basic.c.clone();
+					
+					// Create empty state with placeholder out pointer
+					let state = state_ptr(State::Basic(BasicState {
+						c: cloned_regex.clone(),
+						out: var_state_ptr(State::none()),
+					}));
+					
+					// Insert into memo table
+					memo.insert(raw_ptr, Rc::clone(&state));
+					
+					// Add out state to work stack
+					let out_ref = Rc::clone(&basic.out.borrow());
+					
+					if !State::is_none_ptr(&out_ref) {
+						work_stack.push(WorkItem {
+							state: out_ref,
+							cloned: None,
+							parent: Some(Rc::clone(&state)),
+							is_first_out: true,
+						});
+						(state, vec![])
+					} else {
+						// If out is None, add the out pointer to result_ptr_list
+						let ptr = state.borrow().basic_out().unwrap();
+						(state, vec![ptr])
+					}
+				},
+				
+				State::Split(split) => {
+					// For split states, we need to clone both out1 and out2
+					let state = State::split(State::none(), State::none());
+					
+					// Insert into memo table
+					memo.insert(raw_ptr, Rc::clone(&state));
+					
+					// Add both outputs to work stack
+					let out1_ref = Rc::clone(&split.out1.borrow());
+					let out2_ref = Rc::clone(&split.out2.borrow());
+					
+					work_stack.push(WorkItem {
+						state: out1_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&state)),
+						is_first_out: true,
+					});
+					
+					work_stack.push(WorkItem {
+						state: out2_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&state)),
+						is_first_out: false,
+					});
+					
+					(state, vec![])
+				},
+				
+				State::Match => (State::match_(), vec![]),
+				State::NoMatch => (State::no_match(), vec![]),
+				State::None => (State::none(), vec![]),
+				
+				State::StartOfLine { out } => {
+					let state = state_ptr(State::StartOfLine { 
+						out: var_state_ptr(State::none()) 
+					});
+					
+					memo.insert(raw_ptr, Rc::clone(&state));
+					
+					let out_ref = Rc::clone(&out.borrow());
+					work_stack.push(WorkItem {
+						state: out_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&state)),
+						is_first_out: true,
+					});
+					
+					(state, vec![])
+				},
+				
+				State::EndOfLine { out } => {
+					let state = state_ptr(State::EndOfLine { 
+						out: var_state_ptr(State::none()) 
+					});
+					
+					memo.insert(raw_ptr, Rc::clone(&state));
+					
+					let out_ref = Rc::clone(&out.borrow());
+					work_stack.push(WorkItem {
+						state: out_ref,
+						cloned: None,
+						parent: Some(Rc::clone(&state)),
+						is_first_out: true,
+					});
+					
+					(state, vec![])
+				},
+			};
+			
+			// Update parent pointer if this state has a parent
+			if let Some(parent) = &work_item.parent {
+				State::update_parent_pointer(parent, Rc::clone(&new_state), work_item.is_first_out);
+			}
+			
+			// Add any new pointers to the result list
+			result_ptr_list.extend(child_items);
+		}
+		
+		(initial_result, result_ptr_list)
+	}
+	
+	// Helper function to update a parent state's outgoing pointers
+	fn update_parent_pointer(parent: &StatePtr, child: StatePtr, is_first_out: bool) {
+		match &*parent.borrow() {
+			State::Basic(_) => {
+				parent.borrow_mut().into_basic().unwrap().out.replace(child);
+			},
+			State::Split(_) => {
+				if is_first_out {
+					parent.borrow_mut().into_split().unwrap().out1.replace(child);
+				} else {
+					parent.borrow_mut().into_split().unwrap().out2.replace(child);
+				}
+			},
+			State::StartOfLine { .. } => {
+				if let Some(out) = parent.borrow().start_of_line_out() {
+					out.replace(child);
+				}
+			},
+			State::EndOfLine { .. } => {
+				if let Some(out) = parent.borrow().end_of_line_out() {
+					out.replace(child);
+				}
+			},
+			_ => { /* No outgoing pointers to update */ }
+		}
+	}
+}
+
 impl Fragment {
     pub fn new(start: StatePtr, ptr_list: Vec<VarStatePtr>) -> Self {
         Self { start, ptr_list }

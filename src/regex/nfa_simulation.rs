@@ -114,20 +114,26 @@ impl StateList {
 		)
 	}
 
-	pub fn remove_matchs(&mut self) {
-		let mut matchs = vec![];
+	pub fn remove_matchs(&mut self) -> Vec<StatePtr> {
+		let mut indexes = vec![];
 
 		self.states.iter().enumerate().for_each(|(index, state)|
 			if State::is_match_ptr(state) {
-				matchs.push(index);
+				indexes.push(index);
 			}
 		);
 
 		let mut removed = 0;
-		for index in matchs {
-			self.states.remove(index - removed);
+		let mut matchs = vec![];
+
+		for index in indexes {
+			let match_ = self.states.remove(index - removed);
+			matchs.push(match_);
+
 			removed += 1;
 		}
+
+		matchs
 	}
 
 	pub fn push(&mut self, state: &StatePtr) {

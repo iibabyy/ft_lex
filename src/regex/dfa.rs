@@ -1,41 +1,28 @@
 use std::{cell::RefCell, collections::{BTreeMap, HashMap}, rc::Rc};
 use super::*;
 
-pub type ListPtr = Rc<StateList>;
-pub type DfaStatePtr = Rc<DfaState>;
-pub type DfaMemory = MutPtr<HashMap<StateList, DfaStatePtr>>;
-pub fn ptr_list(list: StateList) -> ListPtr {
-	Rc::new(list)
-}
-
-pub fn ptr_state(state: DfaState) -> DfaStatePtr {
-	Rc::new(state)
-}
+pub type DfaStatePtr = Rc<RefCell<DfaState>>;
 
 /// Merges two HashMaps of InputCondition to StateList
 /// 
 /// For each key that exists in both maps, the corresponding StateLists are merged.
-/// For keys that exist in only one map, they are copied to the result.
+/// For keys that exist only in map2, they are moved to map1.
 pub fn merge_input_maps(
     map1: &mut HashMap<InputCondition, StateList>,
     map2: HashMap<InputCondition, StateList>
 ) {
-    let mut result = map1;
-
     for (input, state_list2) in map2 {
-        if let Some(state_list1) = result.get_mut(&input) {
+        if let Some(state_list1) = map1.get_mut(&input) {
             // If the key exists in both maps, merge the StateLists
             let mut merged = state_list1.clone();
             merged.merge(state_list2);
             *state_list1 = merged;
         } else {
-            // If the key only exists in map2, add it to the result
-            result.insert(input.clone(), state_list2.clone());
+            // If the key only exists in map2, add it to the map1
+            map1.insert(input, state_list2);
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InputCondition {
@@ -51,23 +38,24 @@ pub struct Dfa {
 }
 
 impl Dfa {
-	pub fn new(start: StatePtr) -> Self {
+	pub fn new(starts: Vec<StatePtr>) -> Self {
+		let mut list = StateList::new();
+
+		for state in &starts {
+			list.add_state(state);
+		}
+
+		let mut memory = HashMap::new();
+
+		let start = DfaState::recursive_create(list, &mut memory);
+
 		Dfa {
-			start: ptr_state(DfaState::new(0, &ptr_list(StateList::from(&start)))),
-			memory: HashMap::new(),
+			start,
+			memory
 		}
 	}
 
-	pub fn add_state(&mut self, state: &DfaStatePtr) {
-		let list = state.states.clone();
-		self.memory.insert(list, state.clone());
-	}
-
-	pub fn get_state(&self, list: &StateList) -> Option<&DfaStatePtr> {
-		self.memory.get(list)
-	}
 }
-
 
 pub struct DfaState {
 	id: usize,
@@ -80,22 +68,84 @@ pub struct DfaState {
 }
 
 impl DfaState {
-	pub fn new(id: usize, states: &StateList) -> Self {
+	pub fn new(id: usize, mut states: StateList) -> Self {
+		let mut matchs = StateList::new();
+
+		for match_ in states.remove_matchs() {
+			matchs.add_state(&match_);
+		}
+
 		DfaState {
 			id,
-			states: states.clone(),
-			matchs: StateList::new(),
+			states,
+			matchs,
+
 			next: HashMap::new(),
 		}
 	}
 
-	pub fn next(&self, input: &InputCondition) -> Option<&StateList> {
-		self.next.get(input)
+	pub fn recursive_create(states: StateList, memory: &mut HashMap<StateList, DfaStatePtr>) -> DfaStatePtr {
+		if let Some(next) = memory.get(&states) {
+			return Rc::clone(next)
+		}
+
+		let mut states = DfaState::new(memory.len(), states);
+
+		states.compute_next(memory);
+
+		let states = Rc::new(RefCell::new(states));
+
+		memory.insert(states.borrow().states.clone(), Rc::clone(&states));
+
+		for (_condition, list) in &states.borrow().next {
+			DfaState::recursive_create(list.clone(), memory);
+		}
+
+		states
 	}
 
-	pub fn compute_next(&mut self) {
+	pub fn iterative_create(start_states: StateList) -> DfaStatePtr {
+		let mut memory = HashMap::new();
+		let mut work_queue = VecDeque::new();
+		
+		// Create and process the initial state
+		let start = DfaState::new(0, start_states.clone());
+		let start_ptr = Rc::new(RefCell::new(start));
+
+		memory.insert(start_states.clone(), Rc::clone(&start_ptr));
+		
+		// Add initial transitions to work queue
+		start_ptr.borrow_mut().compute_next(&mut memory);
+		
+		for (_, list) in &start_ptr.borrow().next {
+			if !memory.contains_key(list) {
+				work_queue.push_back(list.clone());
+			}
+		}
+		
+		// Process work queue iteratively
+		while let Some(state_list) = work_queue.pop_front() {
+			let dfa_state = DfaState::new(memory.len(), state_list.clone());
+			let state_ptr = Rc::new(RefCell::new(dfa_state));
+			
+			memory.insert(state_list, Rc::clone(&state_ptr));
+			state_ptr.borrow_mut().compute_next(&mut memory);
+			
+			// Add new states to work queue
+			for (_, list) in &state_ptr.borrow().next {
+				if !memory.contains_key(list) {
+					work_queue.push_back(list.clone());
+				}
+			}
+		}
+		
+		// Return the start state
+		Rc::clone(&memory[&start_states])
+	}
+
+	pub fn compute_next(&mut self, memory: &mut HashMap<StateList, DfaStatePtr>) {
 		for state in self.states.iter() {
-			let (next_states, matchs) = DfaState::find_next(state, &mut self.memory);
+			let (next_states, matchs) = DfaState::find_next(state, memory);
 			merge_input_maps(&mut self.next, next_states);
 			self.matchs.merge(matchs);
 		}
