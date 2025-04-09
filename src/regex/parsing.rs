@@ -34,8 +34,8 @@ pub enum TokenType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterClass {
     // Individual characters in the class
-    chars: HashSet<char>,
-    negated: bool
+    pub chars: HashSet<char>,
+    pub negated: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -249,7 +249,7 @@ impl CharacterClass {
             negated: false
         };
 
-        class.push_into_tokens(tokens);
+        let _ = class.push_into_tokens(tokens);
     }
 
     pub fn add_char(&mut self, c: char) {
@@ -275,7 +275,7 @@ impl CharacterClass {
         }
     }
 
-    pub fn push_into_tokens(self, tokens: &mut VecDeque<RegexType>) {
+    pub fn push_into_tokens(self, tokens: &mut VecDeque<RegexType>) -> ParsingResult<()> {
         let chars = if self.negated == true {
             let mut chars = Self::all();
 
@@ -289,7 +289,7 @@ impl CharacterClass {
         };
 
         if chars.len() < 1 {
-            return
+            return Err(ParsingError::unrecognized_rule().because("empty character class"))
         }
 
         tokens.push_back(RegexType::OpenParenthesis);
@@ -302,6 +302,8 @@ impl CharacterClass {
         tokens.pop_back();
 
         tokens.push_back(RegexType::CloseParenthesis);
+
+		Ok(())
     }
 
     // Parse a character class from a string
@@ -329,8 +331,8 @@ impl CharacterClass {
                                 class.add_char('-');
                                 return Ok(class);
                             } else {
-                                class.add_range(start, end);
                                 class.remove_char(start); // Remove the start char as it's now part of a range
+                                class.add_range(start, end)?;
                                 prev_char = None;
                             }
                         } else {
@@ -393,7 +395,7 @@ impl CharacterClass {
             's' => Ok(Self::whitespace()),
             'S' => Ok(Self::non_whitespace()),
             _ => Err(ParsingError::unrecognized_rule()
-                .because(&format!("Unknown shorthand class \\{}", c))),
+                .because(&format!("Unknown shorthand class '\\{}'", c))),
         }
     }
 
@@ -437,6 +439,15 @@ impl CharacterClass {
 
     pub fn non_whitespace() -> Self {
         Self::whitespace().negated()
+    }
+
+    // Check if a character matches this character class
+    pub fn contains(&self, c: &char) -> bool {
+        if self.negated {
+            !self.chars.contains(c)
+        } else {
+            self.chars.contains(c)
+        }
     }
 }
 
@@ -499,7 +510,7 @@ impl Regex {
                 '[' => Self::add_character_class(&mut tokens, &mut chars)?,
                 '{' => Self::add_quantifier(&mut tokens, &mut chars)?,
                 '\\' => Self::add_backslash(&mut tokens, &mut chars),
-                '*' => CharacterClass::add_all(&mut tokens),
+                '.' => CharacterClass::add_all(&mut tokens),
 
                 c => tokens.push_back(Self::into_type(c)),
             }
@@ -518,7 +529,7 @@ impl Regex {
         match next_c {
             'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
                 if let Ok(class) = CharacterClass::from_shorthand(next_c) {
-                    class.push_into_tokens(tokens);
+                    let _ = class.push_into_tokens(tokens);
                 } else {
                     tokens.push_back(RegexType::Char(Utils::backslashed(next_c)));
                 }
@@ -563,7 +574,7 @@ impl Regex {
         chars: &mut Chars<'_>,
     ) -> ParsingResult<()> {
         let class = CharacterClass::parse(chars)?;
-        class.push_into_tokens(tokens);
+        class.push_into_tokens(tokens)?;
         Ok(())
     }
 

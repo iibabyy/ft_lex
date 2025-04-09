@@ -30,7 +30,7 @@ pub struct ParsingError {
     pub type_: ParsingErrorType,
 
     /// Additional error messages that provide context about the error
-    causes: Vec<String>,
+    pub causes: Vec<String>,
 }
 
 impl std::error::Error for ParsingError {}
@@ -106,6 +106,27 @@ impl ParsingError {
             file: None,
             type_: ParsingErrorType::Io(err),
             causes: Vec::new(),
+        }
+    }
+
+    /// Returns the error message without file information or causes.
+    pub fn message(&self) -> String {
+        let base_message = match &self.type_ {
+            ParsingErrorType::Io(err) => err.to_string(),
+            ParsingErrorType::Syntax(err) => err.to_string(),
+            ParsingErrorType::UnexpectedEof(err) => err.to_string(),
+            ParsingErrorType::Warning(err) => err.to_string(),
+        };
+        
+        if self.causes.is_empty() {
+            base_message
+        } else {
+            let mut message = base_message;
+            for cause in &self.causes {
+                message.push_str(": ");
+                message.push_str(cause);
+            }
+            message
         }
     }
 

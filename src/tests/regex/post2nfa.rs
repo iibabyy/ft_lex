@@ -310,7 +310,7 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
         const ITERATIONS: usize = 5;
         
         // Test with a large structure that would benefit from iterative approach
-        let original = create_linear_chain(500);
+        let original = create_nested_split(700);
         
         let mut recursive_times = Vec::with_capacity(ITERATIONS);
         let mut iterative_times = Vec::with_capacity(ITERATIONS);

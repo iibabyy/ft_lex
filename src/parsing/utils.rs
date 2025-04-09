@@ -251,6 +251,9 @@ impl Utils {
             'n' => '\n',
             't' => '\t',
             'r' => '\r',
+            'f' => '\u{000C}', // Form feed
+            'v' => '\u{000B}', // Vertical tab
+            '0' => '\0',       // Null character
             _ => c,
         }
     }
