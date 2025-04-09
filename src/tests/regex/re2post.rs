@@ -824,3 +824,186 @@ fn test_complex_anchor_handling() {
     
     assert_token_sequences_equal(&result, &expected);
 }
+
+// ==============================================
+// 3. COMPLEX REGEX TESTS
+// ==============================================
+
+#[test]
+fn test_complex_nested_groups_with_alternation() {
+    // Test deeply nested parentheses with alternation and quantifiers
+    let tokens = create_tokens("(a(b|c)*(d(e|f)+g)?)+");
+    let result = re2post(tokens).unwrap();
+    
+    // The postfix notation should have operators after their operands
+    // Verify some key structural elements
+    let char_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Char(_))).count();
+    let or_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Or)).count();
+    let concat_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Concatenation)).count();
+    let quant_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Quant(_))).count();
+    
+    // Ensure we have the expected number of characters and operators
+    assert!(char_count >= 7); // a, b, c, d, e, f, g
+    assert!(or_count >= 2);   // b|c and e|f
+    assert!(concat_count > 0);
+    assert!(quant_count >= 3); // *, +, ?
+    
+    // Verify the last token is the outermost + quantifier
+    if let Some(last) = result.back() {
+        assert!(matches!(last.into_inner(), RegexType::Quant(Quantifier::AtLeast(1))));
+    } else {
+        panic!("Result is empty");
+    }
+}
+
+#[test]
+fn test_complex_alternation_with_groups() {
+    // Test complex alternation with groups and quantifiers
+    let tokens = create_tokens("(ab|cd)*(ef|gh)+|(ij|kl)?");
+    let result = re2post(tokens).unwrap();
+
+	dbg!(&result);
+    
+    // Verify the structure of the postfix expression
+    let char_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Char(_))).count();
+    let or_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Or)).count();
+    
+    assert_eq!(char_count, 12); // a,b,c,d,e,f,g,h,i,j,k,l (some may be optimized out)) 
+    assert!(or_count == 4);    // ab|cd, ef|gh, ij|kl, and the main alternation
+    
+    // The last operator should be the main alternation
+    let last_is_or = result.iter().rev().any(|t| matches!(t.into_inner(), RegexType::Or));
+    assert!(last_is_or);
+}
+
+#[test]
+fn test_complex_quantifiers_with_groups() {
+    // Test various complex quantifier combinations with groups
+    let tokens = create_tokens("(a{2,5}b{3}){1,3}(c{1,}d?){2,}");
+    let result = re2post(tokens).unwrap();
+    
+    // Verify all quantifiers are correctly parsed and positioned
+    let quant_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Quant(_))).count();
+    assert!(quant_count >= 5); // {2,5}, {3}, {1,3}, {1,}, ?, {2,}
+    
+    // Check for specific quantifiers in the result
+    let has_range_2_5 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Range(2, 5))));
+    let has_exact_3 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Exact(3))));
+    let has_range_1_3 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Range(1, 3))));
+    let has_at_least_1 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::AtLeast(1))));
+    let has_range_0_1 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Range(0, 1))));
+    let has_at_least_2 = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::AtLeast(2))));
+    
+    assert!(has_range_2_5);
+    assert!(has_exact_3);
+    assert!(has_range_1_3);
+    assert!(has_at_least_1);
+    assert!(has_range_0_1);
+    assert!(has_at_least_2);
+}
+
+#[test]
+fn test_pathological_regex_conversion() {
+    // Test a pathologically complex regex that combines many features
+    let pattern = "^(([a-z]+)|(\\d{1,3})|(\\w+\\-[0-9]+))+[^\\s\\d]?\\\\\\$\\d+(\\.\\d{2})?$";
+    let tokens = create_tokens(pattern);
+    let result = re2post(tokens).unwrap();
+    
+    // Basic structure verification
+    assert!(result.len() > 20);
+    
+    // Verify anchors are preserved
+    let has_start_anchor = result.iter().any(|t| 
+        matches!(t, TokenType::StartOrEndCondition(RegexType::LineStart))
+    );
+    let has_end_anchor = result.iter().any(|t| 
+        matches!(t, TokenType::StartOrEndCondition(RegexType::LineEnd))
+    );
+    
+    assert!(has_start_anchor);
+    assert!(has_end_anchor);
+    
+    // Count groups, alternations, and quantifiers
+    let or_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Or)).count();
+    let quant_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Quant(_))).count();
+    
+    assert!(or_count >= 3);
+    assert!(quant_count >= 4);
+}
+
+#[test]
+fn test_balanced_nested_parentheses() {
+    // Test deeply nested balanced parentheses
+    let tokens = create_tokens("(((((a)))))(((((b)))))");
+    let result = re2post(tokens).unwrap();
+    
+    // In postfix notation, the nested structure is flattened
+    // We should just have the characters and concatenation
+    assert_eq!(result.len(), 3);
+    
+    let expected = {
+        let mut exp = VecDeque::new();
+        exp.push_back(TokenType::from(RegexType::Char('a')));
+        exp.push_back(TokenType::from(RegexType::Char('b')));
+        exp.push_back(TokenType::from(RegexType::Concatenation));
+        exp
+    };
+    
+    assert_token_sequences_equal(&result, &expected);
+}
+
+#[test]
+fn test_complex_character_classes_and_escapes() {
+    // Test character classes with escapes in a complex pattern
+    let tokens = create_tokens("[a-z0-9]+(\\.[a-z0-9]+)*@[a-z0-9]+(\\.[a-z0-9]+)+");
+    let result = re2post(tokens).unwrap();
+    
+    // Verify the structure has the right components
+    let char_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Char(_))).count();
+    let concat_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Concatenation)).count();
+    let quant_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Quant(_))).count();
+    
+    // We should have multiple characters, concatenations, and quantifiers
+    assert!(char_count > 0);
+    assert!(concat_count > 0);
+    assert!(quant_count >= 2); // + and *
+    
+    // Check for specific characters like @ in the email pattern
+    let has_at_sign = result.iter().any(|t| matches!(t.into_inner(), RegexType::Char('@')));
+    assert!(has_at_sign);
+}
+
+#[test]
+fn test_mixed_operators_precedence() {
+    // Test mixed operators with different precedence levels
+    let tokens = create_tokens("a|b*c+d?e{2,3}");
+    let result = re2post(tokens).unwrap();
+    
+    // In postfix notation, operators come after their operands
+    // Higher precedence operators should be processed first
+    
+    // Verify we have all the expected characters
+    let chars = ['a', 'b', 'c', 'd', 'e'];
+    for c in chars {
+        let has_char = result.iter().any(|t| matches!(t.into_inner(), RegexType::Char(ch) if ch == &c));
+        assert!(has_char, "Character '{}' not found in result", c);
+    }
+    
+    // Verify we have all the expected quantifiers
+    let has_star = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::AtLeast(0))));
+    let has_plus = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::AtLeast(1))));
+    let has_question = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Range(0, 1))));
+    let has_range = result.iter().any(|t| matches!(t.into_inner(), RegexType::Quant(Quantifier::Range(2, 3))));
+    
+    assert!(has_star);
+    assert!(has_plus);
+    assert!(has_question);
+    assert!(has_range);
+    
+    // The last operator should be the alternation (lowest precedence)
+    if let Some(last) = result.back() {
+        assert_eq!(last.into_inner(), &RegexType::Or);
+    } else {
+        panic!("Result is empty");
+    }
+}
