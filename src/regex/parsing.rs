@@ -92,6 +92,13 @@ impl RegexType {
             _ => todo!(),
         }
     }
+    
+    pub fn char(&self) -> Option<char> {
+        match self {
+            RegexType::Char(c) => Some(*c),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for RegexType {

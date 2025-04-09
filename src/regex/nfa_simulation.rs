@@ -44,6 +44,17 @@ impl PartialEq for StateList {
 	}
 }
 
+impl Hash for StateList {
+    fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
+        // Hash the number of states
+        self.states.len().hash(hasher);
+
+        for state_ptr in &self.states {
+            let raw_ptr = state_ptr.borrow().deref() as *const State;
+            raw_ptr.hash(hasher);
+        }
+    }
+}
 
 
 impl StateList {
@@ -135,6 +146,13 @@ impl StateList {
 		self.states.iter()
 	}
 	
+	pub fn merge(&mut self, other: StateList) {
+		for state in other.states {
+			if !self.contains(&state) {
+				self.states.push(state);
+			}
+		}
+	}
 }
 
 /// Represents the status of the NFA simulation

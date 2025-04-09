@@ -34,14 +34,63 @@ pub enum State {
     EndOfLine{ out: VarStatePtr },
 }
 
+impl Hash for State {
+    fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
+        // Hash the discriminant to differentiate between variants
+        std::mem::discriminant(self).hash(hasher);
+        
+        match self {
+            State::Basic(basic) => {
+                basic.hash(hasher);
+            },
+            State::Split(split) => {
+                split.hash(hasher);
+            },
+            State::StartOfLine { out } => {
+                let out_ptr = Rc::as_ptr(&*out.borrow());
+                out_ptr.hash(hasher);
+            },
+            State::EndOfLine { out } => {
+                let out_ptr = Rc::as_ptr(&*out.borrow());
+                out_ptr.hash(hasher);
+            },
+            // NoMatch, Match, and None don't have additional data to hash
+            // Use constant numbers to ensure consistent hashing
+            State::NoMatch => { 1u8.hash(hasher); },
+            State::Match => { 2u8.hash(hasher); },
+            State::None => { 3u8.hash(hasher); }
+        }
+    }
+}
+
+
 pub struct BasicState {
     pub c: RegexType,
     pub out: VarStatePtr,
 }
 
+impl Hash for BasicState {
+    fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
+        self.c.hash(hasher);
+        let out_ptr = Rc::as_ptr(&*self.out.borrow());
+        out_ptr.hash(hasher);
+    }
+}
+
+
 pub struct SplitState {
     pub out1: VarStatePtr,
     pub out2: VarStatePtr,
+}
+
+impl Hash for SplitState {
+    fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
+        let out1_ptr = Rc::as_ptr(&*self.out1.borrow());
+        out1_ptr.hash(hasher);
+
+        let out2_ptr = Rc::as_ptr(&*self.out2.borrow());
+        out2_ptr.hash(hasher);
+    }
 }
 
 /// In the NFA, a Fragment is a list of states that can be matched
