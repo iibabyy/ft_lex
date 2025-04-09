@@ -207,7 +207,7 @@ impl DfaState {
 				list.add_state(&*out.borrow());
 			},
 
-			State::Match => {
+			State::Match {..} => {
 				matchs.add_state(state);
 			},
 

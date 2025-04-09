@@ -28,7 +28,10 @@ pub enum State {
     Basic(BasicState),
     Split(SplitState),
     NoMatch,
-    Match,
+    Match {
+		// Allows to knows wich pattern have matched
+		id: usize
+	},
     None,
     StartOfLine{ out: VarStatePtr },
     EndOfLine{ out: VarStatePtr },
@@ -57,7 +60,10 @@ impl Hash for State {
             // NoMatch, Match, and None don't have additional data to hash
             // Use constant numbers to ensure consistent hashing
             State::NoMatch => { 1u8.hash(hasher); },
-            State::Match => { 2u8.hash(hasher); },
+            State::Match { id } => {
+				2u8.hash(hasher);
+				id.hash(hasher);
+			},
             State::None => { 3u8.hash(hasher); }
         }
     }
@@ -128,8 +134,8 @@ impl State {
         state_ptr(state)
     }
 
-    pub fn match_() -> StatePtr {
-        state_ptr(State::Match)
+    pub fn match_(id: usize) -> StatePtr {
+        state_ptr(State::Match { id })
     }
 
     pub fn no_match() -> StatePtr {
@@ -165,7 +171,7 @@ impl State {
     }
 
     pub fn is_match(&self) -> bool {
-        matches!(self, State::Match)
+        matches!(self, State::Match { .. })
     }
 
     pub fn is_nomatch(&self) -> bool {
@@ -373,7 +379,7 @@ impl State {
                 (state, ptr_list1)
             }
 
-            State::Match => (State::match_(), vec![]),
+            State::Match { id } => (State::match_(*id), vec![]),
 
             State::NoMatch => (State::no_match(), vec![]),
 
@@ -486,7 +492,7 @@ impl State {
 				(state, true)
 			},
 			
-			State::Match => (State::match_(), false),
+			State::Match { id } => (State::match_(*id), false),
 			State::NoMatch => (State::no_match(), false),
 			State::None => (State::none(), false),
 			
@@ -633,7 +639,7 @@ impl State {
 					(state, vec![])
 				},
 				
-				State::Match => (State::match_(), vec![]),
+				State::Match { id } => (State::match_(*id), vec![]),
 				State::NoMatch => (State::no_match(), vec![]),
 				State::None => (State::none(), vec![]),
 				
@@ -927,7 +933,7 @@ impl fmt::Display for State {
 
             State::NoMatch => write!(f, "NoMatch()"),
 
-            State::Match => write!(f, "Match()"),
+            State::Match { id } => write!(f, "Match[{id}]"),
 
             State::None => write!(f, "None"),
 
@@ -1026,7 +1032,7 @@ impl fmt::Debug for SplitState {
 // =============================
 
 /// This function implements Thompson's construction algorithm to convert the postfix regex to an NFA
-pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
+pub fn post2nfa(mut postfix: VecDeque<TokenType>, id: usize) -> ParsingResult<StatePtr> {
 	if postfix.is_empty() {
 		return Err(ParsingError::unrecognized_rule());
 	}
@@ -1102,7 +1108,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 
 		// Only start/end conditions
 		// (remove if start/end conditions whitout pattern are forbidden)
-		fragments.push(Fragment::new(State::match_(), vec![]));
+		fragments.push(Fragment::new(State::match_(id), vec![]));
     }
 
     let mut e = fragments.pop().unwrap();
@@ -1119,7 +1125,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 		e = e.end_of_line();
 	}
 
-    utils::last_patch(&e.ptr_list);
+    utils::last_patch(&e.ptr_list, id);
 
 	Ok(e.start)
 }
@@ -1130,8 +1136,8 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>) -> ParsingResult<StatePtr> {
 pub mod utils {
     use super::*;
 
-    pub fn last_patch(ptr_list: &Vec<VarStatePtr>) {
-        utils::patch(ptr_list, &State::match_());
+    pub fn last_patch(ptr_list: &Vec<VarStatePtr>, id: usize) {
+        utils::patch(ptr_list, &State::match_(id));
     }
 
     /// It connects dangling transitions to a specific state

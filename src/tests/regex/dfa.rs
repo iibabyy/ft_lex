@@ -14,11 +14,11 @@ mod iterative_create_tests {
     fn create_linear_nfa(chars: &[char]) -> StateList {
         let mut list = StateList::new();
         if chars.is_empty() {
-            list.add_state(&State::match_());
+            list.add_state(&State::match_(0));
             return list;
         }
         
-        let mut current = State::match_();
+        let mut current = State::match_(0);
         for &c in chars.iter().rev() {
             let state = create_char_state(c);
             state.borrow_mut().into_basic().unwrap().out.replace(current);
@@ -33,14 +33,14 @@ mod iterative_create_tests {
     fn create_branching_nfa(chars: &[char]) -> StateList {
         let mut list = StateList::new();
         if chars.is_empty() {
-            list.add_state(&State::match_());
+            list.add_state(&State::match_(0));
             return list;
         }
         
         let mut branches = Vec::new();
         for &c in chars {
             let state = create_char_state(c);
-            let match_state = State::match_();
+            let match_state = State::match_(0);
             state.borrow_mut().into_basic().unwrap().out.replace(match_state);
             branches.push(state);
         }
@@ -325,7 +325,7 @@ mod iterative_create_tests {
     fn test_match_states() {
         // Create an NFA with a match state
         let mut list = StateList::new();
-        list.add_state(&State::match_());
+        list.add_state(&State::match_(0));
         
         // Create DFAs using both methods
         let mut memory1 = HashMap::new();
@@ -345,7 +345,7 @@ mod iterative_create_tests {
     fn test_memory_reuse() {
         // Create a simple pattern that reuses states
         let a_state = create_char_state('a');
-        let match_state = State::match_();
+        let match_state = State::match_(0);
         a_state.borrow_mut().into_basic().unwrap().out.replace(match_state.clone());
         
         let b_state = create_char_state('b');

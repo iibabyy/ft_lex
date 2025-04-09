@@ -33,14 +33,14 @@ pub struct Regex {
 // ==============================
 
 impl Regex {
-    pub fn new(expr: String) -> ParsingResult<StatePtr> {
+    pub fn new(expr: String, id: usize) -> ParsingResult<StatePtr> {
         let tokens = Self::tokens(&expr)?;
 
         let tokens_with_concatenation = Self::add_concatenation(tokens);
 
         let postfix = re2post(tokens_with_concatenation)?;
 
-		let start = post2nfa(postfix)?;
+		let start = post2nfa(postfix, id)?;
 
         Ok(start)
     }

@@ -7,7 +7,7 @@ mod add_state_with_memo_iterative_tests {
 
     // Helper function to create a deep linear chain of states
     fn create_deep_chain(depth: usize) -> StatePtr {
-        let match_state = State::match_();
+        let match_state = State::match_(0);
         if depth == 0 {
             return match_state;
         }
@@ -26,7 +26,7 @@ mod add_state_with_memo_iterative_tests {
     // Helper to create a deeply nested split tree
     fn create_split_tree(depth: usize) -> StatePtr {
         if depth == 0 {
-            return State::match_();
+            return State::match_(0);
         }
         
         let left = State::basic(RegexType::Char('a'));
@@ -92,7 +92,7 @@ mod add_state_with_memo_iterative_tests {
     #[test]
     fn test_match_state_add() {
         // Create a match state
-        let match_state = State::match_();
+        let match_state = State::match_(0);
         
         // Add to list using iterative method
         let mut list = StateList::new();
@@ -250,7 +250,7 @@ mod add_state_with_memo_iterative_tests {
         // Test with structures small enough not to overflow the recursive version
         let test_cases = vec![
             State::basic(RegexType::Char('a')),
-            State::match_(),
+            State::match_(0),
             State::split(
                 State::basic(RegexType::Char('a')), 
                 State::basic(RegexType::Char('b'))

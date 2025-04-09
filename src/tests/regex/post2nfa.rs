@@ -7,7 +7,7 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
 
     // Helper function to create a simple linear chain of states
     fn create_linear_chain(length: usize) -> StatePtr {
-        let match_state = State::match_();
+        let match_state = State::match_(0);
         
         if length == 0 {
             return match_state;
@@ -37,11 +37,11 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
     fn create_nested_split(depth: usize) -> StatePtr {
         // Base case
         if depth == 0 {
-            return State::match_();
+            return State::match_(0);
         }
         
         // Start with a match state at the bottom
-        let mut current = State::match_();
+        let mut current = State::match_(0);
         
         // Build the structure iteratively from bottom to top
         for i in 1..=depth {
@@ -65,7 +65,7 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
     fn test_iterative_clone_basic_state() {
         // Create a basic state
         let original = State::basic(RegexType::Char('a'));
-        let match_state = State::match_();
+        let match_state = State::match_(0);
         original.borrow_mut().into_basic().unwrap().out.replace(match_state);
 
         // Clone using iterative method
@@ -237,7 +237,7 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
         // Create various test structures
         let tests = vec![
             State::basic(RegexType::Char('a')),
-            State::match_(),
+            State::match_(0),
             State::split(State::basic(RegexType::Char('a')), State::basic(RegexType::Char('b'))),
             create_linear_chain(10),
             create_nested_split(5)
@@ -428,7 +428,7 @@ mod self_ptr_deep_clone_with_memo_iterative_tests {
                 )
             },
             
-            (State::Match, State::Match) => true,
+            (State::Match {..}, State::Match {..}) => true,
             (State::NoMatch, State::NoMatch) => true,
             (State::None, State::None) => true,
             
