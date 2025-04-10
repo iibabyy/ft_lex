@@ -1600,3 +1600,138 @@ fn test_deep_clone_diamond_structure() {
 	dbg!(&out2_match);
 	assert_eq!(Rc::ptr_eq(&*out1_match.borrow(), &*out2_match.borrow()), true);
 }
+
+#[test]
+fn test_complex_email_pattern() {
+    // Test a complex email pattern
+    let email_pattern = into_postfix("[a-z0-9]+(\\.[a-z0-9]+)*@[a-z0-9]+(\\.[a-z0-9]+)+");
+    
+    // Just test that it creates a valid NFA without errors
+    let nfa_result = post2nfa(email_pattern, 0);
+    assert!(nfa_result.is_ok());
+    
+    let nfa = nfa_result.unwrap();
+    
+    // Verify the NFA has the expected structure
+    // It should have multiple states including character classes and quantifiers
+    let mut state_count = 0;
+    let mut visited = HashSet::new();
+    count_states(&nfa, &mut visited, &mut state_count);
+    
+    // A complex email pattern should have many states
+    assert!(state_count > 20, "Expected a complex NFA with many states, got {}", state_count);
+}
+
+#[test]
+fn test_nested_quantifiers_with_alternation() {
+    // Test a pattern with nested quantifiers and alternation: ((a|b)+c?d*){2,4}
+    let complex_pattern = into_postfix("((a|b)+c?d*){2,4}");
+    
+    // Create a simpler but equivalent pattern for comparison
+    let equivalent_pattern = into_postfix("((a|b)+c?d*)((a|b)+c?d*)((a|b)+c?d*)?((a|b)+c?d*)?");
+    
+    // The NFAs should be equivalent in terms of language acceptance
+    assert!(compare_nfas(complex_pattern, equivalent_pattern));
+}
+
+#[test]
+fn test_complex_backreference_simulation() {
+    // Real backreferences aren't supported in regular NFAs, but we can test patterns
+    // that simulate common backreference use cases
+    
+    // Test a pattern that simulates matching the same word twice
+    // Instead of (\w+)\s+\1, we use (\w+)\s+(\w+) where both word patterns are identical
+    let word_repeat_pattern = into_postfix("\\w+\\s+\\w+");
+    
+    // Test that it creates a valid NFA
+    let nfa_result = post2nfa(word_repeat_pattern, 0);
+    assert!(nfa_result.is_ok());
+    
+    // Test a more complex simulation of HTML tag matching
+    // Instead of <(\w+)>.*?</\1>, we use <\w+>.*?</\w+>
+    let html_tag_pattern = into_postfix("<\\w+>.*?</\\w+>");
+    
+    let html_nfa_result = post2nfa(html_tag_pattern, 0);
+    assert!(html_nfa_result.is_ok());
+}
+
+#[test]
+fn test_complex_lookahead_simulation() {
+    // Real lookaheads aren't supported in regular NFAs, but we can test patterns
+    // that simulate common lookahead use cases
+    
+    // Test a pattern that simulates a password strength check
+    // Password must contain at least one digit, one lowercase, one uppercase
+    let password_pattern = into_postfix("(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}");
+    
+    // This won't work as a true lookahead, but should parse as a valid NFA
+    let nfa_result = post2nfa(password_pattern, 0);
+    assert!(nfa_result.is_ok());
+    
+    // A more realistic approach would be to use a pattern like:
+    let realistic_password = into_postfix(".*\\d.*[a-z].*[A-Z].*|.*\\d.*[A-Z].*[a-z].*|.*[a-z].*\\d.*[A-Z].*|.*[a-z].*[A-Z].*\\d.*|.*[A-Z].*\\d.*[a-z].*|.*[A-Z].*[a-z].*\\d.*");
+    
+    let realistic_nfa_result = post2nfa(realistic_password, 0);
+    assert!(realistic_nfa_result.is_ok());
+}
+
+#[test]
+fn test_extremely_complex_pattern() {
+    // Test an extremely complex pattern combining many features
+    let complex_pattern = into_postfix("^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$");
+    
+    // Just test that it creates a valid NFA without errors
+    let nfa_result = post2nfa(complex_pattern, 0);
+    assert!(nfa_result.is_ok());
+    
+    let nfa = nfa_result.unwrap();
+    
+    // Count the number of states in this complex NFA
+    let mut state_count = 0;
+    let mut visited = HashSet::new();
+    count_states(&nfa, &mut visited, &mut state_count);
+    
+    // This should be a very large NFA
+    assert!(state_count > 30, "Expected a very complex NFA with many states, got {}", state_count);
+}
+
+#[test]
+fn test_pathological_backtracking_patterns() {
+    // Test patterns known to cause catastrophic backtracking in regex engines
+    // (a+)+b against "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac"
+    let backtracking_pattern = into_postfix("(a+)+b");
+    
+    // Just test that it creates a valid NFA without errors
+    let nfa_result = post2nfa(backtracking_pattern, 0);
+    assert!(nfa_result.is_ok());
+    
+    // Another pathological pattern: (\d+)*\d against "12345678901234567890"
+    let another_pattern = into_postfix("(\\d+)*\\d");
+    
+    let another_nfa_result = post2nfa(another_pattern, 0);
+    assert!(another_nfa_result.is_ok());
+}
+
+// Helper function to count the number of states in an NFA
+fn count_states(state: &StatePtr, visited: &mut HashSet<*const State>, count: &mut usize) {
+    let raw_ptr = state.as_ptr() as *const State;
+    if visited.contains(&raw_ptr) {
+        return;
+    }
+    
+    visited.insert(raw_ptr);
+    *count += 1;
+    
+    match &*state.borrow() {
+        State::Split(split) => {
+            count_states(&split.out1.borrow(), visited, count);
+            count_states(&split.out2.borrow(), visited, count);
+        },
+        State::Basic(basic) => {
+            if !State::is_none_var_ptr(&basic.out) {
+                count_states(&basic.out.borrow(), visited, count);
+            }
+        },
+        _ => {},
+    }
+}
