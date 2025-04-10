@@ -981,14 +981,14 @@ impl Fragment {
                 None
             };
 
-            let mut optional_part = self.deep_clone();
+            let mut optional_part = self.deep_clone().optional();
 
             for _ in 1..optional_count {
                 let next_optional = self.deep_clone();
                 optional_part = optional_part.and(next_optional.optional());
             }
 
-            optional_part = optional_part.optional();
+            optional_part = optional_part;
 
 			if fragment.is_none() {
 				// at_least == 0
