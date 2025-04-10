@@ -104,7 +104,7 @@ impl DfaState {
 		states
 	}
 
-	pub fn iterative_create(start_states: StateList) -> DfaStatePtr {
+	pub fn iterative_create(start_states: StateList) -> (DfaStatePtr, HashMap<StateList, DfaStatePtr>) {
 		let mut memory = HashMap::new();
 		let mut work_queue = VecDeque::new();
 		
@@ -140,7 +140,7 @@ impl DfaState {
 		}
 		
 		// Return the start state
-		Rc::clone(&memory[&start_states])
+		(Rc::clone(&memory[&start_states]), memory)
 	}
 
 	pub fn compute_next(&mut self, memory: &mut HashMap<StateList, DfaStatePtr>) {

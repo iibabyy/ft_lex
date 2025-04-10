@@ -186,6 +186,19 @@ impl StateList {
 			}
 		}
 	}
+	
+	pub fn len(&self) -> usize {
+		self.states.len()
+	}
+	
+	pub fn hash_code(&self) -> u64 {
+		use std::hash::{Hash, Hasher};
+		use std::collections::hash_map::DefaultHasher;
+		
+		let mut hasher = DefaultHasher::new();
+		self.hash(&mut hasher);
+		hasher.finish()
+	}
 }
 
 /// Represents the status of the NFA simulation
