@@ -878,11 +878,6 @@ fn compare_nfas(postfix1: VecDeque<TokenType>, postfix2: VecDeque<TokenType>) ->
 	let nfa1 = post2nfa(postfix1, 0).unwrap();
 	let nfa2 = post2nfa(postfix2, 0).unwrap();
 
-	// Print NFA1 structure
-	print_state_structure(&nfa1, "NFA1 Structure:");
-	// Print NFA2 structure
-	print_state_structure(&nfa2, "NFA2 Structure:");
-
 	structures_equal(&nfa1, &nfa2)
 }
 
