@@ -112,3 +112,64 @@ pub fn print_state_structure(nfa: &StatePtr, title: &str) {
 	
 	println!("=== End of {} ===", title);
 }
+
+pub fn print_dfa_structure(dfa: &dfa::Dfa, title: &str) {
+    println!("=== {} Structure ===", title);
+    println!("Total states: {}", dfa.memory.len());
+    
+    // Print start state
+    println!("Start State (ID: {})", dfa.start.borrow().id);
+    
+    // Track visited states to avoid cycles
+    let mut visited = std::collections::HashSet::new();
+    
+    // Queue for BFS traversal
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(dfa.start.clone());
+    
+    while let Some(state_rc) = queue.pop_front() {
+        let state = state_rc.borrow();
+        
+        // Skip if already visited
+        if !visited.insert(state.id) {
+            continue;
+        }
+        
+        println!("State ID: {}", state.id);
+        
+        // Print match information
+        if state.is_match() {
+            println!("  Match State (ID: {})", state.match_id().unwrap());
+        }
+        
+        // Print transitions
+        if state.next.is_empty() {
+            println!("  No transitions");
+        } else {
+            println!("  Transitions:");
+            for (condition, next_id) in &state.next {
+                let condition_str = match condition {
+                    dfa::InputCondition::Char(c) => format!("'{}'", c),
+                    _ => format!("{:?}", condition),
+                };
+                println!("    {} → {}", condition_str, next_id);
+                
+                // Add next state to queue if it exists in memory
+                if let Some(next_state) = dfa.memory.get(next_id) {
+                    queue.push_back(next_state.clone());
+                }
+            }
+        }
+        
+        // Print NFA states contained in this DFA state
+        println!("  Contains NFA states:");
+        for (i, nfa_state) in state.states.iter().enumerate() {
+            println!("  NFA State {}:", i);
+            print_state_structure(nfa_state, &format!("NFA State in DFA {}", state.id));
+        }
+        
+        println!();
+    }
+    
+    println!("=== End of {} Structure ===", title);
+}

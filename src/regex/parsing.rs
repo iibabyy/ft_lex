@@ -391,10 +391,10 @@ impl CharacterClass {
         class
     }
 
-    pub fn from_range(start: char, end: char) -> Self {
+    pub fn from_range(start: char, end: char) -> ParsingResult<Self> {
         let mut class = Self::new();
-        class.add_range(start, end);
-        class
+        class.add_range(start, end)?;
+        Ok(class)
     }
 
     pub fn from_negated(other: CharacterClass) -> Self {

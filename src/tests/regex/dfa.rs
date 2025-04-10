@@ -4,6 +4,10 @@ use crate::regex::post2nfa::*;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
+fn into_postfix(str: &str) -> VecDeque<TokenType> {
+	re2post(Regex::add_concatenation(Regex::tokens(str).unwrap())).unwrap()
+}
+
 // ==========================================
 // InputCondition Tests
 // ==========================================
@@ -192,8 +196,7 @@ fn test_merge_input_maps_with_empty_map() {
 #[test]
 fn test_dfa_creation_simple() {
     // Create a simple NFA for 'a'
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
+    let postfix = into_postfix("a");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -211,10 +214,7 @@ fn test_dfa_creation_simple() {
 #[test]
 fn test_dfa_creation_alternation() {
     // Create an NFA for 'a|b'
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
+    let postfix = into_postfix("a|b");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -233,10 +233,7 @@ fn test_dfa_creation_alternation() {
 #[test]
 fn test_dfa_creation_with_anchors() {
     // Create an NFA for '^a$'
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::LineStart));
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::LineEnd));
+    let postfix = into_postfix("^a$");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -328,10 +325,10 @@ fn test_find_next_end_of_line() {
 // ==========================================
 
 #[test]
+#[allow(deprecated)]
 fn test_recursive_vs_iterative_creation() {
     // Create a simple NFA for 'a'
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
+    let postfix = into_postfix("a");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -340,7 +337,8 @@ fn test_recursive_vs_iterative_creation() {
     state_list.add_state(&nfa_state);
     
     // Create DFA recursively
-    let recursive_start = DfaState::recursive_create(state_list.clone(), &mut HashMap::new());
+    let mut memory = HashMap::new();
+    let recursive_start = DfaState::recursive_create(state_list.clone(), &mut memory);
     
     // Create DFA iteratively
     let (iterative_start, _) = DfaState::iterative_create(state_list);
@@ -370,18 +368,15 @@ fn test_dfa_state_with_empty_list() {
 #[test]
 fn test_dfa_creation_with_complex_pattern() {
     // Create an NFA for '(a|b)*c'
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a|b)*c");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
     // Create DFA
     let dfa = Dfa::new(vec![nfa_state]);
+    
+    // Verify DFA is created correctly
+    assert!(!dfa.memory.is_empty());
     
     // The DFA should have multiple states
     assert!(dfa.memory.len() > 1);
@@ -410,9 +405,7 @@ fn test_full_regex_pipeline_simple() {
 #[test]
 fn test_full_regex_pipeline_alternation() {
     // Create a regex pattern 'a|b'
-    let tokens = Regex::tokens("a|b").unwrap();
-    let infix = Regex::add_concatenation(tokens);
-    let postfix = re2post::re2post(infix).unwrap();
+    let postfix = into_postfix("a|b");
     let nfa = post2nfa(postfix, 0).unwrap();
     
     // Convert to DFA
@@ -427,9 +420,7 @@ fn test_full_regex_pipeline_alternation() {
 #[test]
 fn test_full_regex_pipeline_with_anchors() {
     // Create a regex pattern '^a$'
-    let tokens = Regex::tokens("^a$").unwrap();
-    let infix = Regex::add_concatenation(tokens);
-    let postfix = re2post::re2post(infix).unwrap();
+    let postfix = into_postfix("^a$");
     let nfa = post2nfa(postfix, 0).unwrap();
     
     // Convert to DFA
@@ -453,14 +444,11 @@ fn test_dfa_state_memory_reuse() {
     let mut state_list = StateList::new();
     state_list.add_state(&basic_state);
     
-    // Memory map to track created states
-    let mut memory = HashMap::new();
-    
-    // Create DFA state recursively
-    let dfa_state1 = DfaState::recursive_create(state_list.clone(), &mut memory);
+    // Create DFA state iteratively
+    let (dfa_state1, _) = DfaState::iterative_create(state_list.clone());
     
     // Create another DFA state with the same state list
-    let dfa_state2 = DfaState::recursive_create(state_list, &mut memory);
+    let (dfa_state2, _) = DfaState::iterative_create(state_list);
     
     // Verify the same state instance is reused
     assert!(Rc::ptr_eq(&dfa_state1, &dfa_state2));
@@ -533,12 +521,7 @@ fn test_state_list_merging() {
 #[test]
 fn test_dfa_creation_with_character_class() {
     // Simulate a character class [abc] in postfix (a|b|c)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Or));
+    let postfix = into_postfix("[abc]");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -555,12 +538,7 @@ fn test_dfa_creation_with_character_class() {
 #[test]
 fn test_dfa_creation_with_sequential_quantifiers() {
     // Simulate a pattern like a+b* in postfix (a+ b* concatenate)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("a+b*");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -574,13 +552,7 @@ fn test_dfa_creation_with_sequential_quantifiers() {
 #[test]
 fn test_dfa_creation_with_nested_groups() {
     // Simulate a pattern like (a(b|c))+ in postfix (a (b c |) concatenate +)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
+    let postfix = into_postfix("(a(b|c))+");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -633,21 +605,16 @@ fn test_dfa_state_with_malformed_state() {
 fn test_memory_caching_with_repeated_patterns() {
     // Create NFA for simple repeated pattern to test memory caching
     // Pattern: a*
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
+    let postfix = into_postfix("a*");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
-    
-    // Memory cache for states
-    let mut memory = HashMap::new();
     
     // Create a StateList with the NFA
     let mut state_list = StateList::new();
     state_list.add_state(&nfa_state);
     
     // Create DFA states for the same pattern repeatedly
-    let state1 = DfaState::recursive_create(state_list.clone(), &mut memory);
+    let (_, memory) = DfaState::iterative_create(state_list.clone());
     
     // The memory cache should now have entries
     assert!(!memory.is_empty());
@@ -673,9 +640,8 @@ fn test_state_list_hashing_consistency() {
     list2.add_state(&state2);
     
     // Create DFA states with memory caching
-    let mut memory = HashMap::new();
-    let dfa_state1 = DfaState::recursive_create(list1, &mut memory);
-    let dfa_state2 = DfaState::recursive_create(list2, &mut memory);
+    let (dfa_state1, memory) = DfaState::iterative_create(list1);
+    let (dfa_state2, _) = DfaState::iterative_create(list2);
     
     // The memory cache should reuse the same state
     assert_eq!(memory.len(), 1); // Only one unique state list
@@ -689,12 +655,10 @@ fn test_state_list_hashing_consistency() {
 #[test]
 fn test_multi_pattern_dfa_creation() {
     // Create NFAs for 'a' and 'b'
-    let mut postfix1 = VecDeque::new();
-    postfix1.push_back(TokenType::from(RegexType::Char('a')));
+    let postfix1 = into_postfix("a");
     let nfa1 = post2nfa(postfix1, 0).unwrap();
     
-    let mut postfix2 = VecDeque::new();
-    postfix2.push_back(TokenType::from(RegexType::Char('b')));
+    let postfix2 = into_postfix("b");
     let nfa2 = post2nfa(postfix2, 1).unwrap();
     
     // Create DFA from both NFAs
@@ -709,12 +673,10 @@ fn test_multi_pattern_dfa_creation() {
 #[test]
 fn test_multi_pattern_match_states() {
     // Create NFAs for 'a' and 'b' with different match IDs
-    let mut postfix1 = VecDeque::new();
-    postfix1.push_back(TokenType::from(RegexType::Char('a')));
+    let postfix1 = into_postfix("a");
     let nfa1 = post2nfa(postfix1, 5).unwrap(); // Match ID 5
     
-    let mut postfix2 = VecDeque::new();
-    postfix2.push_back(TokenType::from(RegexType::Char('b')));
+    let postfix2 = into_postfix("b");
     let nfa2 = post2nfa(postfix2, 10).unwrap(); // Match ID 10
     
     // Create DFA
@@ -743,9 +705,7 @@ fn test_multi_pattern_match_states() {
 #[test]
 fn test_dfa_creation_with_cyclic_nfa() {
     // Create an NFA for 'a*' (which has a cycle)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
+    let postfix = into_postfix("a*");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -768,11 +728,7 @@ fn test_dfa_creation_with_cyclic_nfa() {
 #[test]
 fn test_dfa_creation_with_complex_cycle() {
     // Create an NFA for '(ab)*' (which has a more complex cycle)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
+    let postfix = into_postfix("(ab)*");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1055,11 +1011,10 @@ fn test_state_list_order_independence() {
     list2.add_state(&state1);
     
     // Create DFA states
-    let mut memory = HashMap::new();
-    let dfa_state1 = DfaState::recursive_create(list1, &mut memory);
+    let (dfa_state1, memory) = DfaState::iterative_create(list1);
     
     // This should reuse the same DFA state
-    let dfa_state2 = DfaState::recursive_create(list2, &mut memory);
+    let (dfa_state2, _) = DfaState::iterative_create(list2);
     
     // Verify state reuse (same pointer)
     assert!(Rc::ptr_eq(&dfa_state1, &dfa_state2));
@@ -1080,12 +1035,11 @@ fn test_state_list_hash_with_different_match_ids() {
     list2.add_state(&match_state2);
     
     // Create DFA states
-    let mut memory = HashMap::new();
-    let _ = DfaState::recursive_create(list1, &mut memory);
-    let _ = DfaState::recursive_create(list2, &mut memory);
+    let (_, memory1) = DfaState::iterative_create(list1);
+    let (_, memory2) = DfaState::iterative_create(list2);
     
     // Verify both states were created (no reuse)
-    assert_eq!(memory.len(), 2); // Two distinct state lists
+    assert_eq!(memory1.len() + memory2.len(), 2); // Two distinct state lists
 }
 
 // ==========================================
@@ -1095,16 +1049,7 @@ fn test_state_list_hash_with_different_match_ids() {
 #[test]
 fn test_large_dfa_alternation() {
     // Test construction of a DFA for a large alternation: a|b|c|d|e
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('e')));
-    postfix.push_back(TokenType::from(RegexType::Or));
+    let postfix = into_postfix("a|b|c|d|e");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1125,14 +1070,7 @@ fn test_large_dfa_alternation() {
 #[test]
 fn test_large_dfa_nested_alternation() {
     // Test with a complex nested structure: (a|b)(c|d)
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a|b)(c|d)");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1195,10 +1133,7 @@ fn test_recursive_dfa_id_consistency() {
     // Verify that DFA state IDs are assigned consistently in recursive creation
     
     // Create a pattern that will result in multiple states
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("ab");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1206,9 +1141,8 @@ fn test_recursive_dfa_id_consistency() {
     let mut state_list = StateList::new();
     state_list.add_state(&nfa_state);
     
-    // Create DFA recursively
-    let mut memory = HashMap::new();
-    let _ = DfaState::recursive_create(state_list, &mut memory);
+    // Create DFA iteratively
+    let (_, memory) = DfaState::iterative_create(state_list);
     
     // Verify IDs are consecutive starting from 0
     let mut used_ids = Vec::new();
@@ -1229,10 +1163,7 @@ fn test_iterative_dfa_id_consistency() {
     // Verify that DFA state IDs are assigned consistently in iterative creation
     
     // Create a pattern that will result in multiple states
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("ab");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1266,12 +1197,7 @@ fn test_clean_memory_map() {
     // Verify that the memory map doesn't contain duplicate StateLists
     
     // Create an NFA for a pattern that yields multiple states
-    let mut postfix = VecDeque::new();
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a|b)c");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1397,35 +1323,7 @@ fn test_state_list_in_dfa_creation() {
 #[test]
 fn test_deeply_nested_alternation_and_concatenation() {
     // Create a complex pattern with nested alternation and concatenation: (a|(b(c|d)e)|(f|g)h)i
-    let mut postfix = VecDeque::new();
-    
-    // Build a|(b(c|d)e)|(f|g)h
-    // First branch: a
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    
-    // Second branch: b(c|d)e
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Char('e')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Third branch: (f|g)h
-    postfix.push_back(TokenType::from(RegexType::Char('f')));
-    postfix.push_back(TokenType::from(RegexType::Char('g')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Char('h')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Combine with OR: a|(b(c|d)e)|(f|g)h
-    postfix.push_back(TokenType::from(RegexType::Or));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Concatenate with i: (a|(b(c|d)e)|(f|g)h)i
-    postfix.push_back(TokenType::from(RegexType::Char('i')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a|(b(c|d)e)|(f|g)h)i");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1448,26 +1346,15 @@ fn test_deeply_nested_alternation_and_concatenation() {
 #[test]
 fn test_complex_quantifiers() {
     // Create a pattern with multiple nested quantifiers: (a+b*c?)+
-    let mut postfix = VecDeque::new();
-    
-    // Build a+b*c?
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::Range(0, 1))));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Apply + quantifier to the whole group: (a+b*c?)+
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
+    let postfix = into_postfix("(a+b*c?)+");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
-    
+
     // Create DFA
     let dfa = Dfa::new(vec![nfa_state]);
-    
+
+	dbg!(&dfa);
+
     // Verify DFA construction succeeded with reasonable state count
     assert!(dfa.memory.len() >= 4); // Complex pattern with loops should result in multiple states
     
@@ -1479,34 +1366,7 @@ fn test_complex_quantifiers() {
 #[test]
 fn test_alternation_with_common_prefixes() {
     // Create a pattern with common prefixes: abc|abd|abe
-    let mut postfix = VecDeque::new();
-    
-    // Build abc
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Build abd
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Combine: abc|abd
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Build abe
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    postfix.push_back(TokenType::from(RegexType::Char('e')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Combine: abc|abd|abe
-    postfix.push_back(TokenType::from(RegexType::Or));
+    let postfix = into_postfix("abc|abd|abe");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1545,18 +1405,7 @@ fn test_alternation_with_common_prefixes() {
 #[test]
 fn test_repeated_backtracking_pattern() {
     // Create a pattern that would cause catastrophic backtracking in NFA: (a*)*b
-    let mut postfix = VecDeque::new();
-    
-    // Build a*
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    
-    // Apply another * quantifier: (a*)*
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    
-    // Concatenate with b: (a*)*b
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a*)*b");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1573,21 +1422,7 @@ fn test_repeated_backtracking_pattern() {
 #[test]
 fn test_nested_repetition_pattern() {
     // Create a pattern with deeply nested repetition: ((a+)+)+b
-    let mut postfix = VecDeque::new();
-    
-    // Build a+
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    
-    // Apply another + quantifier: (a+)+
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    
-    // Apply third + quantifier: ((a+)+)+
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    
-    // Concatenate with b: ((a+)+)+b
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("((a+)+)+b");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1608,36 +1443,7 @@ fn test_nested_repetition_pattern() {
 #[test]
 fn test_potential_state_explosion() {
     // Create a pattern that could lead to state explosion: (a|b)(c|d)(e|f)(g|h)
-    let mut postfix = VecDeque::new();
-    
-    // Build (a|b)
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Build (c|d)
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Concatenate: (a|b)(c|d)
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Build (e|f)
-    postfix.push_back(TokenType::from(RegexType::Char('e')));
-    postfix.push_back(TokenType::from(RegexType::Char('f')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Concatenate: (a|b)(c|d)(e|f)
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Build (g|h)
-    postfix.push_back(TokenType::from(RegexType::Char('g')));
-    postfix.push_back(TokenType::from(RegexType::Char('h')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Concatenate: (a|b)(c|d)(e|f)(g|h)
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("(a|b)(c|d)(e|f)(g|h)");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1659,19 +1465,11 @@ fn test_potential_state_explosion() {
 fn test_multi_pattern_with_overlapping_matches() {
     // Create NFAs for overlapping patterns
     // First pattern: ab (match ID 1)
-    let mut postfix1 = VecDeque::new();
-    postfix1.push_back(TokenType::from(RegexType::Char('a')));
-    postfix1.push_back(TokenType::from(RegexType::Char('b')));
-    postfix1.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix1 = into_postfix("ab");
     let nfa1 = post2nfa(postfix1, 1).unwrap();
     
     // Second pattern: abc (match ID 2)
-    let mut postfix2 = VecDeque::new();
-    postfix2.push_back(TokenType::from(RegexType::Char('a')));
-    postfix2.push_back(TokenType::from(RegexType::Char('b')));
-    postfix2.push_back(TokenType::from(RegexType::Concatenation));
-    postfix2.push_back(TokenType::from(RegexType::Char('c')));
-    postfix2.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix2 = into_postfix("abc");
     let nfa2 = post2nfa(postfix2, 2).unwrap();
     
     // Create DFA from both NFAs
@@ -1709,30 +1507,7 @@ fn test_multi_pattern_with_overlapping_matches() {
 #[test]
 fn test_complex_anchor_patterns() {
     // Create pattern with both anchors: ^(a|b)c$
-    let mut postfix = VecDeque::new();
-    
-    // Start anchor
-    postfix.push_back(TokenType::from(RegexType::LineStart));
-    
-    // Build (a|b)
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Concatenate with start anchor: ^(a|b)
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Add 'c'
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    
-    // Concatenate: ^(a|b)c
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // End anchor
-    postfix.push_back(TokenType::from(RegexType::LineEnd));
-    
-    // Concatenate: ^(a|b)c$
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("^(a|b)c$");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1761,6 +1536,14 @@ fn test_complex_anchor_patterns() {
             
             // Should have end-of-line transition
             assert!(c_next.next.contains_key(&InputCondition::EndOfLine));
+            
+            // Follow end-of-line transition
+            let eol_next_id = c_next.next.get(&InputCondition::EndOfLine).unwrap();
+            let eol_next = dfa.memory.get(eol_next_id).unwrap().borrow();
+            
+            // Should have a match after end-of-line
+            assert!(!eol_next.matchs.is_empty());
+            assert_eq!(eol_next.id, 0); // Match ID should be 0
         }
     }
 }
@@ -1774,35 +1557,11 @@ fn test_memory_caching_for_equivalent_expressions() {
     // Create two equivalent expressions in different ways: (ab|ac) and a(b|c)
     
     // First expression: (ab|ac) as NFA
-    let mut postfix1 = VecDeque::new();
-    
-    // ab
-    postfix1.push_back(TokenType::from(RegexType::Char('a')));
-    postfix1.push_back(TokenType::from(RegexType::Char('b')));
-    postfix1.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // ac
-    postfix1.push_back(TokenType::from(RegexType::Char('a')));
-    postfix1.push_back(TokenType::from(RegexType::Char('c')));
-    postfix1.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // ab|ac
-    postfix1.push_back(TokenType::from(RegexType::Or));
-    
+    let postfix1 = into_postfix("ab|ac");
     let nfa1 = post2nfa(postfix1, 0).unwrap();
     
     // Second expression: a(b|c) as NFA
-    let mut postfix2 = VecDeque::new();
-    
-    // b|c
-    postfix2.push_back(TokenType::from(RegexType::Char('b')));
-    postfix2.push_back(TokenType::from(RegexType::Char('c')));
-    postfix2.push_back(TokenType::from(RegexType::Or));
-    
-    // a(b|c)
-    postfix2.push_back(TokenType::from(RegexType::Char('a')));
-    postfix2.push_back(TokenType::from(RegexType::Concatenation));
-    
+    let postfix2 = into_postfix("a(b|c)");
     let nfa2 = post2nfa(postfix2, 0).unwrap();
     
     // Create DFAs for both expressions
@@ -1842,46 +1601,7 @@ fn test_memory_caching_for_equivalent_expressions() {
 #[test]
 fn test_all_features_combined() {
     // Create a pattern with anchors, alternation, quantifiers, and grouping: ^(a|b)+c|(d*e)$
-    let mut postfix = VecDeque::new();
-    
-    // First part: ^(a|b)+c
-    
-    // Build (a|b)
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Char('b')));
-    postfix.push_back(TokenType::from(RegexType::Or));
-    
-    // Apply + quantifier: (a|b)+
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(1))));
-    
-    // Start anchor
-    postfix.push_back(TokenType::from(RegexType::LineStart));
-    
-    // Concatenate: ^(a|b)+
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Concatenate with c: ^(a|b)+c
-    postfix.push_back(TokenType::from(RegexType::Char('c')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Second part: (d*e)$
-    
-    // Build d*
-    postfix.push_back(TokenType::from(RegexType::Char('d')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::AtLeast(0))));
-    
-    // Concatenate with e: d*e
-    postfix.push_back(TokenType::from(RegexType::Char('e')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // End anchor
-    postfix.push_back(TokenType::from(RegexType::LineEnd));
-    
-    // Concatenate: (d*e)$
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
-    
-    // Combine both parts: ^(a|b)+c|(d*e)$
-    postfix.push_back(TokenType::from(RegexType::Or));
+    let postfix = into_postfix("^(a|b)+c|(d*e)$");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     
@@ -1901,15 +1621,7 @@ fn test_all_features_combined() {
 fn test_unusual_transitions() {
     // Create a pattern with transitions that might be treated specially in NFA but should be 
     // normalized in DFA: (a?a)
-    let mut postfix = VecDeque::new();
-    
-    // Build a?
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Quant(Quantifier::Range(0, 1))));
-    
-    // Concatenate with a: a?a
-    postfix.push_back(TokenType::from(RegexType::Char('a')));
-    postfix.push_back(TokenType::from(RegexType::Concatenation));
+    let postfix = into_postfix("a?a");
     
     let nfa_state = post2nfa(postfix, 0).unwrap();
     

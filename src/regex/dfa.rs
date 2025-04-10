@@ -31,6 +31,7 @@ pub enum InputCondition {
 	Char(char),
 }
 
+#[derive(Debug)]
 pub struct Dfa {
 	pub start: DfaStatePtr,
 
@@ -45,9 +46,7 @@ impl Dfa {
 			list.add_state(state);
 		}
 
-		let mut memory = HashMap::new();
-
-		let start = DfaState::recursive_create(list, &mut memory);
+		let (start, memory) = DfaState::iterative_create(list);
 
 		Dfa {
 			start,
@@ -57,6 +56,7 @@ impl Dfa {
 
 }
 
+#[derive(Debug)]
 pub struct DfaState {
 	pub id: usize,
 
@@ -84,6 +84,7 @@ impl DfaState {
 		}
 	}
 
+	#[deprecated(note="please use `iterative_create` instead")]
 	pub fn recursive_create(states: StateList, memory: &mut HashMap<StateList, DfaStatePtr>) -> DfaStatePtr {
 		if let Some(next) = memory.get(&states) {
 			return Rc::clone(next)
@@ -173,7 +174,7 @@ impl DfaState {
 			State::Basic(basic) => {
 				let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));
 				let list = next_states.entry(condition).or_insert_with(|| StateList::new());
-				list.add_state(state);
+				list.add_state(&state.borrow().basic_out().unwrap().borrow());
 			},
 
 			State::Split(split) => {
@@ -215,5 +216,34 @@ impl DfaState {
 		}
 
 		(next_states, matchs)
+	}
+
+	pub fn is_match(&self) -> bool {
+		self.matchs.is_empty() == false
+	}
+
+	pub fn match_id(&self) -> Option<usize> {
+
+		if self.matchs.is_empty() {
+			return  None;
+		}
+
+		let mut match_ = 0;
+
+		for state in self.matchs.iter() {
+			match &*state.borrow() {
+
+				State::Match { id } => {
+					if match_ < *id {
+						match_ = *id;
+					}
+				},
+
+				_ => panic!("Invalid state")
+			}
+
+		}
+
+		Some(match_)
 	}
 }

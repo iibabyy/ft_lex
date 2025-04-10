@@ -308,7 +308,8 @@ impl State {
         Self::self_ptr_deep_clone_with_memo_iterative(self, &mut HashMap::new())
     }
     
-    pub fn self_ptr_deep_clone_with_memo(
+	#[deprecated(note="please use `self_ptr_deep_clone_with_memo_iterative` instead")]
+    pub fn self_ptr_deep_clone_with_memo_recursive(
         &self, 
         memo: &mut HashMap<*const State, StatePtr>
     ) -> (StatePtr, Vec<VarStatePtr>) {
@@ -651,7 +652,7 @@ impl State {
 			
 			// Clone current state
 			let state_ref = &*work_item.state.borrow();
-			let (new_state, mut child_items) = Self::clone_state(state_ref, raw_ptr, memo, work_stack);
+			let (new_state, child_items) = Self::clone_state(state_ref, raw_ptr, memo, work_stack);
 			
 			// Update parent pointer if this state has a parent
 			if let Some(parent) = &work_item.parent {

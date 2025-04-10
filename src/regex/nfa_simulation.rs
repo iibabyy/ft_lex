@@ -12,6 +12,34 @@ pub struct StateList {
     states: Vec<StatePtr>,
 }
 
+impl std::fmt::Display for StateList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "StateList[")?;
+        for (i, state) in self.states.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            match &*state.borrow() {
+                State::Basic(basic) => {
+                    let char_repr = match basic.c.char() {
+                        Some(c) => format!("'{}'", c),
+                        None => format!("{:?}", basic.c),
+                    };
+                    write!(f, "Basic({})", char_repr)?;
+                },
+                State::Split(_) => write!(f, "Split")?,
+                State::Match { id } => write!(f, "Match({})", id)?,
+                State::StartOfLine { .. } => write!(f, "StartOfLine")?,
+                State::EndOfLine { .. } => write!(f, "EndOfLine")?,
+                State::NoMatch => write!(f, "NoMatch")?,
+                State::None => write!(f, "None")?,
+            }
+        }
+        write!(f, "]")
+    }
+}
+
+
 impl Clone for StateList {
 	fn clone(&self) -> Self {
 		let cloned_states = self.states.iter().map(|state| Rc::clone(state)).collect();

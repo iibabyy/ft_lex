@@ -209,7 +209,7 @@ fn test_character_class_from_single() {
 
 #[test]
 fn test_character_class_from_range() {
-    let class = CharacterClass::from_range('0', '9');
+    let class = CharacterClass::from_range('0', '9').unwrap();
     assert!(class.contains(&'0'));
     assert!(class.contains(&'5'));
     assert!(class.contains(&'9'));
@@ -709,7 +709,7 @@ fn test_tokens_with_backslash_negated_shorthand_classes() {
 
 #[test]
 fn test_tokens_with_wildcard() {
-    let mut result = Vec::from(Regex::tokens(".").unwrap());
+    let result = Vec::from(Regex::tokens(".").unwrap());
 
     // The dot character should expand to a character class that matches any character
 
