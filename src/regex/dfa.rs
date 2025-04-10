@@ -92,7 +92,7 @@ impl DfaState {
 
 		let mut states = DfaState::new(memory.len(), states);
 
-		states.compute_next(memory);
+		states.compute_next();
 
 		let states = Rc::new(RefCell::new(states));
 
@@ -114,9 +114,9 @@ impl DfaState {
 		let start_ptr = Rc::new(RefCell::new(start));
 
 		memory.insert(start_states.clone(), Rc::clone(&start_ptr));
-		
+
 		// Add initial transitions to work queue
-		start_ptr.borrow_mut().compute_next(&mut memory);
+		start_ptr.borrow_mut().compute_next();
 		
 		for (_, list) in &start_ptr.borrow().next {
 			if !memory.contains_key(list) {
@@ -130,7 +130,7 @@ impl DfaState {
 			let state_ptr = Rc::new(RefCell::new(dfa_state));
 			
 			memory.insert(state_list, Rc::clone(&state_ptr));
-			state_ptr.borrow_mut().compute_next(&mut memory);
+			state_ptr.borrow_mut().compute_next();
 			
 			// Add new states to work queue
 			for (_, list) in &state_ptr.borrow().next {
@@ -144,9 +144,9 @@ impl DfaState {
 		(Rc::clone(&memory[&start_states]), memory)
 	}
 
-	pub fn compute_next(&mut self, memory: &mut HashMap<StateList, DfaStatePtr>) {
-		for state in self.states.iter() {
-			let (next_states, matchs) = DfaState::find_next(state, memory);
+	pub fn compute_next(&mut self) {
+		for state in &self.states {
+			let (next_states, matchs) = DfaState::find_next(state, &self.states);
 			merge_input_maps(&mut self.next, next_states);
 			self.matchs.merge(matchs);
 		}
@@ -166,20 +166,22 @@ impl DfaState {
 	/// A tuple containing:
 	/// * A HashMap mapping input conditions to the states reachable under those conditions
 	/// * A StateList containing any match states encountered
-	pub fn find_next(state: &StatePtr, memory: &mut HashMap<StateList, DfaStatePtr>) -> (HashMap<InputCondition, StateList>, StateList) {
+	pub fn find_next(state: &StatePtr, current_states: &StateList) -> (HashMap<InputCondition, StateList>, StateList) {
 		let mut next_states: HashMap<InputCondition, StateList> = HashMap::new();
 		let mut matchs: StateList = StateList::new();
 
 		match &*state.borrow() {
 			State::Basic(basic) => {
-				let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));
-				let list = next_states.entry(condition).or_insert_with(|| StateList::new());
-				list.add_state(&state.borrow().basic_out().unwrap().borrow());
+				if !State::is_none_var_ptr(&basic.out) && !State::is_nomatch_var_ptr(&basic.out) {
+					let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));
+					let list = next_states.entry(condition).or_insert_with(|| StateList::new());
+					list.add_state(&basic.out.borrow());
+				}
 			},
 
 			State::Split(split) => {
-				let (next_states_1, matchs_1) = DfaState::find_next(&*State::deref_var_ptr(&split.out1), memory);
-				let (next_states_2, matchs_2) = DfaState::find_next(&*State::deref_var_ptr(&split.out2), memory);
+				let (next_states_1, matchs_1) = DfaState::find_next(&*State::deref_var_ptr(&split.out1), current_states);
+				let (next_states_2, matchs_2) = DfaState::find_next(&*State::deref_var_ptr(&split.out2), current_states);
 
 				matchs.merge(matchs_1);
 				matchs.merge(matchs_2);
@@ -201,11 +203,24 @@ impl DfaState {
 			State::StartOfLine { out } => {
 				let list = next_states.entry(InputCondition::StartOfLine).or_insert_with(|| StateList::new());
 				list.add_state(&*out.borrow());
+
+				current_states.iter().for_each(|state|
+					if !State::is_end_of_line_ptr(state) {
+						list.add_state(state)
+					}
+				);
 			},
 
 			State::EndOfLine { out } => {
 				let list = next_states.entry(InputCondition::EndOfLine).or_insert_with(|| StateList::new());
 				list.add_state(&*out.borrow());
+
+				// if end of line, states
+				current_states.iter().for_each(|state|
+					if !State::is_start_of_line_ptr(state) {
+						list.add_state(state)
+					}
+				);
 			},
 
 			State::Match {..} => {
@@ -230,11 +245,11 @@ impl DfaState {
 
 		let mut match_ = 0;
 
-		for state in self.matchs.iter() {
+		for state in &self.matchs {
 			match &*state.borrow() {
 
 				State::Match { id } => {
-					if match_ < *id {
+					if *id < match_ {
 						match_ = *id;
 					}
 				},

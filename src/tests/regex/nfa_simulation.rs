@@ -296,7 +296,7 @@ mod add_state_with_memo_iterative_tests {
             );
             
             // Verify same character states
-            for state in recursive_list.iter() {
+            for state in &recursive_list {
                 if let Some(basic) = state.borrow().into_basic() {
                     if let Some(ch) = basic.c.char() {
                         assert!(

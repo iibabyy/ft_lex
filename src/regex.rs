@@ -163,7 +163,7 @@ pub fn print_dfa_structure(dfa: &dfa::Dfa, title: &str) {
         
         // Print NFA states contained in this DFA state
         println!("  Contains NFA states:");
-        for (i, nfa_state) in state.states.iter().enumerate() {
+        for (i, nfa_state) in state.states.enumerate() {
             println!("  NFA State {}:", i);
             print_state_structure(nfa_state, &format!("NFA State in DFA {}", state.id));
         }

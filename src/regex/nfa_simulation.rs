@@ -1,4 +1,4 @@
-use std::{collections::HashSet, hash::Hash, iter::Peekable, ops::Deref, rc::Rc};
+use std::{collections::HashSet, hash::Hash, iter::{Enumerate, Peekable}, ops::Deref, rc::Rc};
 
 use super::*;
 
@@ -10,6 +10,33 @@ use super::*;
 #[derive(Debug)]
 pub struct StateList {
     states: Vec<StatePtr>,
+}
+
+impl<'a> IntoIterator for &'a StateList {
+    type Item = &'a StatePtr;
+    type IntoIter = std::slice::Iter<'a, StatePtr>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        self.states.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut StateList {
+    type Item = &'a mut StatePtr;
+    type IntoIter = std::slice::IterMut<'a, StatePtr>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        self.states.iter_mut()
+    }
+}
+
+impl IntoIterator for StateList {
+    type Item = StatePtr;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        self.states.into_iter()
+    }
 }
 
 impl std::fmt::Display for StateList {
@@ -36,6 +63,14 @@ impl std::fmt::Display for StateList {
             }
         }
         write!(f, "]")
+    }
+}
+
+impl std::ops::Index<usize> for StateList {
+    type Output = StatePtr;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.states[index]
     }
 }
 
@@ -202,11 +237,7 @@ impl StateList {
 	pub fn is_empty(&self) -> bool {
 		self.states.is_empty()
 	}
-	
-	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
-		self.states.iter()
-	}
-	
+
 	pub fn merge(&mut self, other: StateList) {
 		for state in other.states {
 			if !self.contains(&state) {
@@ -226,6 +257,29 @@ impl StateList {
 		let mut hasher = DefaultHasher::new();
 		self.hash(&mut hasher);
 		hasher.finish()
+	}
+
+	pub fn enumerate(&self) -> Enumerate<std::slice::Iter<'_, StatePtr>> {
+		self.states.iter().enumerate()
+	}
+
+	pub fn match_(&self, c: char) -> bool {
+
+		for state in self {
+			if state.borrow().matche_with(&c) {
+				return true
+			}
+		}
+
+		false
+	}
+	
+	pub fn iter(&self) -> std::slice::Iter<'_, StatePtr> {
+		self.states.iter()
+	}
+	
+	pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, StatePtr> {
+		self.states.iter_mut()
 	}
 }
 
@@ -322,7 +376,7 @@ impl<'a> NfaSimulation<'a> {
 
 		self.readed += 1;
 
-		for state in self.current_states.iter() {
+		for state in &self.current_states {
 			// The states should be basic states
 			if State::is_basic_ptr(state) == false {
 				continue;
