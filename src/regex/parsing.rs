@@ -11,6 +11,7 @@ use crate::*;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RegexType {
     Char(char),
+	CharacterClass(CharacterClass),
     LineStart,
     LineEnd,
     OpenParenthesis,
@@ -31,11 +32,21 @@ pub enum TokenType {
     StartOrEndCondition(RegexType),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CharacterClass {
     // Individual characters in the class
     pub chars: Vec<char>,
     pub negated: bool
+}
+
+impl fmt::Display for CharacterClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.negated {
+            write!(f, "[^{}]", self.chars.iter().collect::<String>())
+        } else {
+            write!(f, "[{}]", self.chars.iter().collect::<String>())
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -99,12 +110,20 @@ impl RegexType {
             _ => None,
         }
     }
+
+	pub fn class(&self) -> Option<&CharacterClass> {
+		match self {
+			RegexType::CharacterClass(cc) => Some(cc),
+			_ => None,
+		}
+	}
 }
 
 impl fmt::Display for RegexType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RegexType::Char(c) => write!(f, "{}", c),
+            RegexType::CharacterClass(cc) => write!(f, "[{}]", cc),
             RegexType::LineStart => write!(f, "^"),
             RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),
@@ -231,25 +250,17 @@ impl CharacterClass {
         }
     }
 
-    pub fn all() -> Vec<char> {
+    pub fn all() -> Self {
         let mut chars = Vec::with_capacity(127);
 
         for char in 0..=127_u8 {
             chars.push(char as char);
         }
 
-        chars
-    }
-
-    pub fn add_all(tokens: &mut VecDeque<RegexType>) {
-        let chars = Self::all();
-
-        let class = Self {
+        Self {
             chars,
             negated: false
-        };
-
-        let _ = class.push_into_tokens(tokens);
+        }
     }
 
     pub fn add_char(&mut self, c: char) {
@@ -282,46 +293,6 @@ impl CharacterClass {
         } else {
             Err(ParsingError::unrecognized_rule().because("negative range in character class"))
         }
-    }
-
-    pub fn push_into_tokens(self, tokens: &mut VecDeque<RegexType>) -> ParsingResult<()> {
-        let chars = if self.negated == true {
-            let mut chars = Self::all();
-
-            for c in self.chars {
-                let search = chars
-					.iter()
-					.enumerate()
-					.find_map(|(index, char)|
-						(char == &c).then_some(index)
-					);
-
-				if let Some(index) = search {
-					chars.remove(index);
-				}
-            }
-
-            chars
-        } else {
-            self.chars
-        };
-
-        if chars.len() < 1 {
-            return Err(ParsingError::unrecognized_rule().because("empty character class"))
-        }
-
-        tokens.push_back(RegexType::OpenParenthesis);
-
-        for c in chars {
-            tokens.push_back(RegexType::Char(c));
-
-            tokens.push_back(RegexType::Or);            
-        }
-        tokens.pop_back();
-
-        tokens.push_back(RegexType::CloseParenthesis);
-
-		Ok(())
     }
 
     // Parse a character class from a string
@@ -449,8 +420,8 @@ impl CharacterClass {
     pub fn whitespace() -> Self {
         let mut class = Self::new();
         // Add all whitespace characters
-        for c in [' ', '\t', '\r', '\n', '\u{000C}', '\u{000B}'] {
-            class.add_char(c);
+        for c in [9_u8, 10, 11, 12, 13, 32] {
+            class.add_char(c as char);
         }
         class
     }
@@ -467,6 +438,14 @@ impl CharacterClass {
             self.chars.contains(c)
         }
     }
+
+	pub fn len(&self) -> usize {
+		if self.negated {
+			128 - self.chars.len()
+		} else {
+			self.chars.len()
+		}
+	}
 }
 
 // ==============================================
@@ -528,7 +507,7 @@ impl Regex {
                 '[' => Self::add_character_class(&mut tokens, &mut chars)?,
                 '{' => Self::add_quantifier(&mut tokens, &mut chars)?,
                 '\\' => Self::add_backslash(&mut tokens, &mut chars),
-                '.' => CharacterClass::add_all(&mut tokens),
+                '.' => tokens.push_back(RegexType::CharacterClass(CharacterClass::all())),
 
                 c => tokens.push_back(Self::into_type(c)),
             }
@@ -547,7 +526,7 @@ impl Regex {
         match next_c {
             'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
                 if let Ok(class) = CharacterClass::from_shorthand(next_c) {
-                    let _ = class.push_into_tokens(tokens);
+                    tokens.push_back(RegexType::CharacterClass(class));
                 } else {
                     tokens.push_back(RegexType::Char(Utils::backslashed(next_c)));
                 }
@@ -592,7 +571,7 @@ impl Regex {
         chars: &mut Chars<'_>,
     ) -> ParsingResult<()> {
         let class = CharacterClass::parse(chars)?;
-        class.push_into_tokens(tokens)?;
+        tokens.push_back(RegexType::CharacterClass(class));
         Ok(())
     }
 

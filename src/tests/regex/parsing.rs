@@ -177,6 +177,7 @@ fn test_character_class_add_char() {
     
     // Adding same char again shouldn't duplicate
     class.add_char('a');
+    assert!(class.contains(&'a'));
     assert_eq!(class.chars.len(), 1);
 }
 
@@ -220,14 +221,17 @@ fn test_character_class_from_range() {
 fn test_character_class_negated() {
     let class = CharacterClass::from_single('a').negated();
     assert!(class.negated);
+	assert_eq!(class.len(), 127);
+	assert!(!class.contains(&'a'));
 }
 
 #[test]
 fn test_character_class_from_negated() {
     let original = CharacterClass::from_single('a');
-    let negated = CharacterClass::from_negated(original);
+    let negated = original.negated();
     assert!(negated.negated);
     assert!(negated.chars.contains(&'a'));
+	assert_eq!(negated.len(), 127);
 }
 
 #[test]
@@ -243,6 +247,7 @@ fn test_character_class_predefined_non_digit() {
     let class = CharacterClass::non_digit();
     assert!(!class.contains(&'0'));
     assert!(class.negated);
+	assert_eq!(class.len(), 118);
 }
 
 #[test]
@@ -252,6 +257,7 @@ fn test_character_class_predefined_word_char() {
     assert!(class.contains(&'Z'));
     assert!(class.contains(&'0'));
     assert!(class.contains(&'_'));
+	assert_eq!(class.len(), 63);
 }
 
 #[test]
@@ -262,6 +268,7 @@ fn test_character_class_predefined_non_word_char() {
 
     assert!(!class.contains(&'a'));
     assert!(class.negated);
+	assert_eq!(class.len(), 128 - 63);
 }
 
 #[test]
@@ -270,6 +277,7 @@ fn test_character_class_predefined_whitespace() {
     assert!(class.contains(&' '));
     assert!(class.contains(&'\t'));
     assert!(class.contains(&'\n'));
+	assert_eq!(class.len(), 6);
 }
 
 #[test]
@@ -277,6 +285,7 @@ fn test_character_class_predefined_non_whitespace() {
     let class = CharacterClass::non_whitespace();
     assert!(!class.contains(&' '));
     assert!(class.negated);
+	assert_eq!(class.len(), 128 - 6);
 }
 
 #[test]
@@ -308,19 +317,6 @@ fn test_character_class_all() {
 }
 
 #[test]
-fn test_character_class_push_into_tokens() {
-    let mut tokens = VecDeque::new();
-    let class = CharacterClass::from_single('a');
-    
-	assert!(class.push_into_tokens(&mut tokens).is_ok());
-    
-    assert_eq!(tokens.len(), 3);
-    assert_eq!(tokens[0], RegexType::OpenParenthesis);
-    assert_eq!(tokens[1], RegexType::Char('a'));
-    assert_eq!(tokens[2], RegexType::CloseParenthesis);
-}
-
-#[test]
 fn test_character_class_parse_simple() {
     let input = "abc]";
     let mut chars = input.chars();
@@ -331,7 +327,7 @@ fn test_character_class_parse_simple() {
     assert!(class.contains(&'a'));
     assert!(class.contains(&'b'));
     assert!(class.contains(&'c'));
-    assert_eq!(class.chars.len(), 3);
+    assert_eq!(class.len(), 3);
 }
 
 #[test]
@@ -344,6 +340,7 @@ fn test_character_class_parse_negated() {
 
 	let class = result.unwrap();
 	assert!(class.negated);
+	assert_eq!(class.len(), 128 - 3);
 
 	// Don't contains banned chars
     assert!(!class.contains(&'a'));
@@ -362,7 +359,10 @@ fn test_character_class_parse_range() {
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
-    let class = result.unwrap();
+
+	let class = result.unwrap();
+	assert_eq!(class.len(), 3);
+
     assert!(class.contains(&'a'));
     assert!(class.contains(&'b'));
     assert!(class.contains(&'c'));
@@ -375,7 +375,10 @@ fn test_character_class_parse_dash_at_start() {
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
-    let class = result.unwrap();
+
+	let class = result.unwrap();
+	assert_eq!(class.len(), 4);
+
     assert!(class.contains(&'-'));
     assert!(class.contains(&'a'));
 }
@@ -387,7 +390,10 @@ fn test_character_class_parse_dash_at_end() {
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
-    let class = result.unwrap();
+
+	let class = result.unwrap();
+	assert_eq!(class.len(), 4);
+
     assert!(class.contains(&'-'));
     assert!(class.contains(&'a'));
 }
@@ -626,28 +632,54 @@ fn test_tokens_with_invalid_character_in_quantifier() {
 fn test_tokens_with_character_class() {
     let result = Regex::tokens("[abc]").unwrap();
 
-    assert_eq!(result.len(), 7); // Open, a, |, b, |, c, Close
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    // The middle will have characters with OR operators
-    assert_eq!(result[result.len()-1], RegexType::CloseParenthesis);
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result[0], RegexType::CharacterClass(_)));
+
+	let class = result[0].class().unwrap();
+	assert!(!class.negated);
+	assert_eq!(class.len(), 3);
+
+	for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
+		if class.contains(&c) {
+			assert!(c == 'a' || c == 'b' || c == 'c');
+		}
+	}
 }
 
 #[test]
 fn test_tokens_with_negated_character_class() {
     let result = Regex::tokens("[^abc]").unwrap();
     // This will create a complex structure with all ASCII chars except a, b, c
-    assert!(result.len() > 5);
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    assert_eq!(result[result.len()-1], RegexType::CloseParenthesis);
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result[0], RegexType::CharacterClass(_)));
+
+	let class = result[0].class().unwrap();
+	assert!(class.negated);
+	assert_eq!(class.len(), 128 - 3);
+
+	for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
+		if !class.contains(&c) {
+			assert!(c == 'a' || c == 'b' || c == 'c');
+		}
+	}
 }
 
 #[test]
 fn test_tokens_with_character_range() {
     let result = Regex::tokens("[a-c]").unwrap();
 
-    assert_eq!(result.len(), 7); // Open, a, |, b, |, c, Close
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    assert_eq!(result[result.len()-1], RegexType::CloseParenthesis);
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result[0], RegexType::CharacterClass(_)));
+
+	let class = result[0].class().unwrap();
+	assert!(!class.negated);
+	assert_eq!(class.len(), 3);
+
+	for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
+		if class.contains(&c) {
+			assert!(c == 'a' || c == 'b' || c == 'c');
+		}
+	}
 }
 
 #[test]
@@ -697,55 +729,119 @@ fn test_tokens_with_escaped_characters() {
 fn test_tokens_with_backslash_shorthand_classes() {
     let result = Regex::tokens("\\d\\w\\s").unwrap();
     // Each shorthand class gets expanded to a character class
-    assert!(result.len() > 3);
+    assert_eq!(result.len(), 3);
+
+	assert!(matches!(result[0], RegexType::CharacterClass(_)));
+	assert!(matches!(result[1], RegexType::CharacterClass(_)));
+	assert!(matches!(result[2], RegexType::CharacterClass(_)));
+
+	if let RegexType::CharacterClass(digit) = &result[0] {
+		assert!(!digit.negated);
+		assert_eq!(digit.len(), 10);
+
+		assert!(digit.contains(&'0'));
+		assert!(digit.contains(&'9'));
+		assert!(!digit.contains(&'a'));
+		assert!(!digit.contains(&'z'));
+	}
+
+	if let RegexType::CharacterClass(word) = &result[1] {
+		assert!(!word.negated);
+		assert_eq!(word.len(), 63);
+
+		assert!(word.contains(&'a'));
+		assert!(word.contains(&'z'));
+		assert!(word.contains(&'0'));
+		assert!(word.contains(&'9'));
+		assert!(word.contains(&'_'));
+		assert!(!word.contains(&' '));
+		assert!(!word.contains(&'\t'));
+		assert!(!word.contains(&'\n'));
+	}
+
+	if let RegexType::CharacterClass(space) = &result[2] {
+		assert!(!space.negated);
+		assert_eq!(space.len(), 6);
+
+		assert!(space.contains(&' '));
+		assert!(space.contains(&'\t'));
+		assert!(space.contains(&'\n'));
+		assert!(!space.contains(&'a'));
+		assert!(!space.contains(&'z'));
+		assert!(!space.contains(&'0'));
+		assert!(!space.contains(&'9'));
+		assert!(!space.contains(&'_'));
+	}
 }
 
 #[test]
 fn test_tokens_with_backslash_negated_shorthand_classes() {
     let result = Regex::tokens("\\D\\W\\S").unwrap();
     // Each negated shorthand class gets expanded to a character class
-    assert!(result.len() > 3);
+    assert_eq!(result.len(), 3);
+
+	assert!(matches!(result[0], RegexType::CharacterClass(_)));
+	assert!(matches!(result[1], RegexType::CharacterClass(_)));
+	assert!(matches!(result[2], RegexType::CharacterClass(_)));
+	
+	if let RegexType::CharacterClass(digit) = &result[0] {
+		assert!(digit.negated);
+		assert_eq!(digit.len(), 128 - 10);
+
+		assert!(!digit.contains(&'0'));
+		assert!(!digit.contains(&'9'));
+		assert!(digit.contains(&'a'));
+		assert!(digit.contains(&'z'));
+	}
+	
+	if let RegexType::CharacterClass(word) = &result[1] {
+		assert!(word.negated);
+		assert_eq!(word.len(), 128 - 63);
+
+		assert!(!word.contains(&'a'));
+		assert!(!word.contains(&'z'));
+		assert!(!word.contains(&'0'));
+		assert!(!word.contains(&'9'));
+		assert!(!word.contains(&'_'));
+		assert!(word.contains(&' '));
+		assert!(word.contains(&'\t'));
+		assert!(word.contains(&'\n'));
+	}
+
+	if let RegexType::CharacterClass(space) = &result[2] {
+		assert!(space.negated);
+		assert_eq!(space.len(), 128 - 6);
+
+		assert!(!space.contains(&' '));
+		assert!(!space.contains(&'\t'));
+		assert!(!space.contains(&'\n'));
+		assert!(space.contains(&'a'));
+		assert!(space.contains(&'z'));
+	}
 }
 
 #[test]
 fn test_tokens_with_wildcard() {
     let result = Vec::from(Regex::tokens(".").unwrap());
 
-    // The dot character should expand to a character class that matches any character
-
-	// parenthesis + 127(char + Or) + last char + parenthesis
-	assert_eq!(result.len(), 1 + (127 * 2) + 1 + 1);
-    // The first token should be an opening parenthesis for the character class
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    // The last token should be a closing parenthesis for the character class
-    assert_eq!(result[result.len() - 1], RegexType::CloseParenthesis);
-
-    // Check that the wildcard character class contains all 127 ASCII characters
-    let mut expected_chars = HashSet::new();
-    for i in 0..=127 {
-        if let Some(c) = char::from_u32(i) {
-            expected_chars.insert(c);
+    // Wildcard should be converted to a character class that matches any character
+    assert_eq!(result.len(), 1);
+    
+    // Verify it's a character class
+    assert!(matches!(result[0], RegexType::CharacterClass(_)));
+    
+    // Get the character class and verify it matches any character
+    if let RegexType::CharacterClass(class) = &result[0] {
+        // Test that the wildcard character class matches all 128 ASCII characters
+        for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
+            assert!(class.contains(&c), "Wildcard should match character '{}'", c);
         }
-    }
-    
-	// First token should be parenthesis
-	assert!(matches!(result[0], RegexType::OpenParenthesis));
-	// Last token should be parenthesis
-	assert!(matches!(result[result.len() - 1], RegexType::CloseParenthesis));
-
-    // Extract all character literals from the tokens
-    let mut found_chars = HashSet::new();
-    for token in &result[1..result.len() - 1] {
-        if let RegexType::Char(c) = token {
-            found_chars.insert(*c);
-        } else {
-			assert_eq!(token, &RegexType::Or);
-		}
-    }
-    
-    // Verify that all expected characters are present
-    for c in expected_chars {
-        assert!(found_chars.contains(&c), "Character '{}' (ASCII {}) not found in wildcard expansion", c, c as u32);
+        
+        // It should be equivalent to CharacterClass::all()
+        assert_eq!(class.len(), CharacterClass::all().len());
+        assert!(!class.negated);
+    } else {
+        panic!("Expected a character class for wildcard");
     }
 }
 
@@ -755,8 +851,19 @@ fn test_add_backslash() {
     let mut chars = "d".chars();
     
     Regex::add_backslash(&mut tokens, &mut chars);
-    // \d should expand to a digit character class
-    assert!(tokens.len() > 2);
+
+    assert_eq!(tokens.len(), 1);
+
+	assert!(matches!(tokens.front().unwrap(), RegexType::CharacterClass(CharacterClass { .. })));
+
+	let class = tokens.front().unwrap().class().unwrap();
+	assert!(!class.negated);
+	assert_eq!(class.len(), 10);
+	
+	assert!(class.contains(&'0'));
+	assert!(class.contains(&'9'));
+	assert!(!class.contains(&'a'));
+	assert!(!class.contains(&'z'));
 }
 
 #[test]
@@ -783,7 +890,19 @@ fn test_add_character_class() {
     
     let result = Regex::add_character_class(&mut tokens, &mut chars);
     assert!(result.is_ok());
-    assert!(tokens.len() > 2);
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], RegexType::CharacterClass(_)));
+
+	let class = tokens[0].class().unwrap();
+	assert!(!class.negated);
+	assert_eq!(class.len(), 3);
+	
+	for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
+		if class.contains(&c) {
+			assert!(c == 'a' || c == 'b' || c == 'c');
+		}
+	}
+	
 }
 
 #[test]
@@ -927,9 +1046,20 @@ fn test_very_long_regex() {
 #[test]
 fn test_character_classes_with_many_ranges() {
     let result = Regex::tokens("[a-zA-Z0-9_-]").unwrap();
-    assert!(result.len() > 10);
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    assert_eq!(result[result.len()-1], RegexType::CloseParenthesis);
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result[0], RegexType::CharacterClass(_)));
+
+	let class = result[0].class().unwrap();
+	assert!(!class.negated);
+	assert_eq!(class.len(), 64);
+
+	assert!(class.contains(&'a'));
+	assert!(class.contains(&'z'));
+	assert!(class.contains(&'0'));
+	assert!(class.contains(&'9'));
+	assert!(class.contains(&'_'));
+	assert!(class.contains(&'-'));
+	assert!(!class.contains(&' '));
 }
 #[test]
 fn test_escape_sequences() {
@@ -1003,25 +1133,11 @@ fn test_complex_nested_groups() {
 fn test_complex_character_class_with_escapes_and_ranges() {
     // Test character class with ranges, escapes, and negation
     let result = Regex::tokens("[^a-z0-9\\n\\t\\-\\[\\]\\\\]").unwrap();
-    
-    // Verify the structure of the tokens
-    // For character classes, tokens() should create a structure like (c1|c2|c3|...)
-    // with alternation between all possible characters
-    
-    // First token should be open parenthesis
-    assert_eq!(result[0], RegexType::OpenParenthesis);
-    
-    // Check for alternation operators between characters
-    let or_count = result.iter().filter(|&t| *t == RegexType::Or).count();
-    
-    // Verify we have multiple characters with Or operators between them
-    assert!(or_count > 0);
-    
-    // Last token should be close parenthesis
-    assert_eq!(result[result.len() - 1], RegexType::CloseParenthesis);
-    
-    // Create and test the actual character class behavior
-    let class = CharacterClass::parse(&mut "^a-z0-9\\n\\t\\-\\[\\]\\\\]".chars()).unwrap();
+
+	assert_eq!(result.len(), 1);
+	assert!(matches!(result[0], RegexType::CharacterClass(_)));
+
+	let class = result[0].class().unwrap();
     
     // Test negation behavior
     assert!(!class.contains(&'a'));
@@ -1107,13 +1223,13 @@ fn test_pathological_regex() {
         matches!(t, RegexType::Quant(_))
     ).count();
     
-    assert!(group_count >= 5);
-    assert!(alternation_count >= 3);
-    assert!(quantifier_count >= 4);
+    assert_eq!(group_count, 5);
+    assert_eq!(alternation_count, 2);
+    assert_eq!(quantifier_count, 9);
     
     // Verify we have character classes
     let has_char_class = result.iter().any(|t| 
-        matches!(t, RegexType::Char('a'))
+        matches!(t, RegexType::CharacterClass(_))
     );
     
     assert!(has_char_class);
