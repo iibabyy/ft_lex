@@ -173,9 +173,17 @@ impl DfaState {
 		match &*state.borrow() {
 			State::Basic(basic) => {
 				if !State::is_none_var_ptr(&basic.out) && !State::is_nomatch_var_ptr(&basic.out) {
-					let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));
-					let list = next_states.entry(condition).or_insert_with(|| StateList::new());
-					list.add_state(&basic.out.borrow());
+					if let RegexType::CharacterClass(class) = &basic.c {
+						for c in class.chars() {
+							let condition = InputCondition::Char(c);
+							let list = next_states.entry(condition).or_insert_with(|| StateList::new());
+							list.add_state(&basic.out.borrow());
+						}
+					} else {
+						let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));
+						let list = next_states.entry(condition).or_insert_with(|| StateList::new());
+						list.add_state(&basic.out.borrow());
+					}
 				}
 			},
 

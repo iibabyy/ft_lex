@@ -446,6 +446,21 @@ impl CharacterClass {
 			self.chars.len()
 		}
 	}
+
+	pub fn chars(&self) -> Vec<char> {
+		if self.negated {
+			let mut chars = Vec::with_capacity(128);
+			for c in 0..=127_u8 {
+				if !self.chars.contains(&(c as char)) {
+					chars.push(c as char);
+				}
+			}
+
+			chars
+		} else {
+			self.chars.clone()
+		}
+	}
 }
 
 // ==============================================
