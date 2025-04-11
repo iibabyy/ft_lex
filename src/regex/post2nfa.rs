@@ -428,6 +428,14 @@ impl State {
         }
     }
 
+	pub fn match_id(&self) -> Option<usize> {
+		match self {
+			Self::Match { id } => Some(*id),
+
+			_ => None,
+		}
+	}
+
 }
 
 // Stack for pending work (state to clone, parent reference, field to update)

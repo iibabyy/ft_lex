@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::{BTreeMap, HashMap}, rc::Rc};
+use std::{cell::RefCell, collections::{BTreeMap, HashMap}, rc::Rc, usize};
 use super::*;
 
 pub type DfaStatePtr = Rc<RefCell<DfaState>>;
@@ -251,7 +251,7 @@ impl DfaState {
 			return  None;
 		}
 
-		let mut match_ = 0;
+		let mut match_ = usize::MAX;
 
 		for state in &self.matchs {
 			match &*state.borrow() {
