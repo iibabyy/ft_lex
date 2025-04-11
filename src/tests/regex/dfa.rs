@@ -5,6 +5,8 @@ use std::collections::{HashMap, VecDeque, HashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
+mod normalizer;
+
 fn into_postfix(str: &str) -> VecDeque<TokenType> {
 	re2post(Regex::add_concatenation(Regex::tokens(str).unwrap())).unwrap()
 }
