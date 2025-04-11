@@ -7,14 +7,14 @@ pub use re2post::*;
 pub mod post2nfa;
 pub use post2nfa::*;
 
-pub mod nfa_simulation;
-pub use nfa_simulation::*;
+pub mod statelist;
+pub use statelist::*;
 
 pub mod dfa;
 pub use dfa::*;
 
-pub mod dfa_simulation;
-pub use dfa_simulation::*;
+pub mod nfa;
+pub use nfa::*;
 
 use std::{collections::{HashSet, VecDeque}, fmt, ops, str::Chars};
 

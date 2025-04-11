@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::{BTreeMap, HashMap}, rc::Rc, usize};
 use super::*;
 
+pub mod normalizer;
+
 pub type DfaStatePtr = Rc<RefCell<DfaState>>;
 
 /// Merges two HashMaps of InputCondition to StateList
