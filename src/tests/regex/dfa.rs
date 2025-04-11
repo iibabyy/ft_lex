@@ -2047,7 +2047,7 @@ fn test_with_empty_regex_pattern() {
 fn test_with_very_large_regex_pattern() {
     // Create a very long alternation pattern (a|b|c|d|...)* repeated many times
     let mut pattern = String::new();
-    for i in 0..10 {
+    for _ in 0..10 {
         pattern.push_str("(a|b|c|d|e|f|g|h|i|j)*");
     }
     
