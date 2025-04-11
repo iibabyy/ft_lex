@@ -350,8 +350,8 @@ static void yynoreturn yy_fatal_error ( const char* msg  );
 		YY_FATAL_ERROR( "token too large, exceeds YYLMAX" ); \
 	yy_flex_strncpy( yytext, (yytext_ptr), yyleng + 1 ); \
 	(yy_c_buf_p) = yy_cp;
-#define YY_NUM_RULES 11
-#define YY_END_OF_BUFFER 12
+#define YY_NUM_RULES 10
+#define YY_END_OF_BUFFER 11
 /* This struct is not used in this scanner,
    but its presence is necessary. */
 struct yy_trans_info
@@ -359,11 +359,11 @@ struct yy_trans_info
 	flex_int32_t yy_verify;
 	flex_int32_t yy_nxt;
 	};
-static const flex_int16_t yy_accept[31] =
+static const flex_int16_t yy_accept[29] =
     {   0,
-        0,    0,    0,    0,    0,    0,    0,    0,   12,    3,
-       11,    3,    3,   10,    9,    5,   10,    2,    2,    2,
-        8,    7,    0,    3,    3,    6,    3,    6,    1,    0
+        0,    0,    0,    0,    0,    0,    0,    0,   11,   10,
+        2,   10,   10,    9,    8,    4,    9,    0,    3,    7,
+        6,    0,    0,    5,    0,    5,    1,    0
     } ;
 
 static const YY_CHAR yy_ec[256] =
@@ -400,44 +400,42 @@ static const YY_CHAR yy_ec[256] =
 
 static const YY_CHAR yy_meta[13] =
     {   0,
-        1,    2,    1,    1,    1,    3,    3,    1,    3,    3,
+        1,    1,    1,    1,    1,    2,    2,    1,    2,    2,
         1,    1
     } ;
 
-static const flex_int16_t yy_base[37] =
+static const flex_int16_t yy_base[33] =
     {   0,
-       22,   21,    0,    0,   20,   17,    5,   12,   18,    0,
-       43,    8,    7,   43,   43,   43,   18,    0,    8,    0,
-       43,   43,    0,    0,    7,    0,    0,   43,    0,   43,
-       30,   33,   36,   39,    1,    0
+       22,   21,    0,    0,   20,   17,    5,   12,   18,   35,
+       35,    8,    7,   35,   35,   35,   18,    8,   35,   35,
+       35,    0,    7,    0,    0,   35,   35,   35,   30,   32,
+        2,    1
     } ;
 
-static const flex_int16_t yy_def[37] =
+static const flex_int16_t yy_def[33] =
     {   0,
-       31,   31,   31,    3,   31,   31,   32,   32,   30,   33,
-       30,   33,   33,   30,   30,   30,   30,   34,   34,   34,
-       30,   30,   35,   34,   34,   36,   34,   30,   34,    0,
-       30,   30,   30,   30,   30,   30
+       29,   29,   29,    3,   29,   29,   30,   30,   28,   28,
+       28,   28,   28,   28,   28,   28,   28,   28,   28,   28,
+       28,   31,   28,   32,   28,   28,   28,    0,   28,   28,
+       28,   28
     } ;
 
-static const flex_int16_t yy_nxt[56] =
+static const flex_int16_t yy_nxt[48] =
     {   0,
-       30,   11,   28,   26,   12,   13,   15,   16,   30,   29,
-       27,   25,   17,   15,   16,   20,   19,   30,   11,   17,
-       21,   11,   11,   11,   30,   30,   30,   30,   22,   23,
-       10,   10,   10,   14,   14,   14,   18,   30,   18,   24,
-       30,   24,    9,   30,   30,   30,   30,   30,   30,   30,
-       30,   30,   30,   30,   30
+       28,   11,   26,   24,   12,   13,   15,   16,   28,   27,
+       25,   23,   17,   15,   16,   19,   18,   28,   11,   17,
+       20,   11,   11,   11,   28,   28,   28,   28,   21,   22,
+       10,   10,   14,   14,    9,   28,   28,   28,   28,   28,
+       28,   28,   28,   28,   28,   28,   28
     } ;
 
-static const flex_int16_t yy_chk[56] =
+static const flex_int16_t yy_chk[48] =
     {   0,
-        0,    3,   36,   35,    3,    3,    7,    7,    0,   27,
-       25,   19,    7,    8,    8,   13,   12,    9,    6,    8,
+        0,    3,   32,   31,    3,    3,    7,    7,    0,   25,
+       23,   18,    7,    8,    8,   13,   12,    9,    6,    8,
        17,    5,    2,    1,    0,    0,    0,    0,   17,   17,
-       31,   31,   31,   32,   32,   32,   33,    0,   33,   34,
-        0,   34,   30,   30,   30,   30,   30,   30,   30,   30,
-       30,   30,   30,   30,   30
+       29,   29,   30,   30,   28,   28,   28,   28,   28,   28,
+       28,   28,   28,   28,   28,   28,   28
     } ;
 
 static yy_state_type yy_last_accepting_state;
@@ -463,13 +461,13 @@ char *yytext_ptr;
 #line 2 "examples/example.lex"
   #include <stdio.h>
   #include <stdlib.h>
-#line 467 "lex.yy.c"
+#line 465 "lex.yy.c"
 #line 7 "examples/example.lex"
   int num_lines = 0;
   int foo = 12;
-#line 471 "lex.yy.c"
+#line 469 "lex.yy.c"
 
-#line 473 "lex.yy.c"
+#line 471 "lex.yy.c"
 
 #define INITIAL 0
 #define COMMENT 1
@@ -693,7 +691,7 @@ YY_DECL
 
 
 
-#line 697 "lex.yy.c"
+#line 695 "lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -720,13 +718,13 @@ yy_match:
 			while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 				{
 				yy_current_state = (int) yy_def[yy_current_state];
-				if ( yy_current_state >= 31 )
+				if ( yy_current_state >= 29 )
 					yy_c = yy_meta[yy_c];
 				}
 			yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
 			++yy_cp;
 			}
-		while ( yy_base[yy_current_state] != 43 );
+		while ( yy_base[yy_current_state] != 35 );
 
 yy_find_action:
 		yy_act = yy_accept[yy_current_state];
@@ -756,61 +754,57 @@ YY_RULE_SETUP
 { BEGIN(COMMENT); }
 	YY_BREAK
 case 2:
+/* rule 2 can match eol */
 YY_RULE_SETUP
 #line 32 "examples/example.lex"
-printf("HAHAHA\n");
-	YY_BREAK
-case 3:
-YY_RULE_SETUP
-#line 33 "examples/example.lex"
 printf("BABABA\n");
 	YY_BREAK
 
-case 4:
+case 3:
 YY_RULE_SETUP
-#line 36 "examples/example.lex"
+#line 35 "examples/example.lex"
 { BEGIN(INITIAL); }
 	YY_BREAK
 
 
+case 4:
+YY_RULE_SETUP
+#line 39 "examples/example.lex"
+{ BEGIN(INITIAL); }
+	YY_BREAK
 case 5:
 YY_RULE_SETUP
 #line 40 "examples/example.lex"
-{ BEGIN(INITIAL); }
+{ printf("HEX ESCAPE: %s\n", yytext); }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
 #line 41 "examples/example.lex"
-{ printf("HEX ESCAPE: %s\n", yytext); }
+{ printf("NEWLINE ESCAPE\n"); }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
 #line 42 "examples/example.lex"
-{ printf("NEWLINE ESCAPE\n"); }
-	YY_BREAK
-case 8:
-YY_RULE_SETUP
-#line 43 "examples/example.lex"
 { printf("QUOTE ESCAPE\n"); }
 	YY_BREAK
-case 9:
-/* rule 9 can match eol */
+case 8:
+/* rule 8 can match eol */
 YY_RULE_SETUP
-#line 44 "examples/example.lex"
+#line 43 "examples/example.lex"
 { fprintf(stderr, "ERROR: Newline in string\n"); exit(1); }
 	YY_BREAK
-case 10:
+case 9:
 YY_RULE_SETUP
-#line 45 "examples/example.lex"
+#line 44 "examples/example.lex"
 { printf("STRING CHAR: %s\n", yytext); }
 	YY_BREAK
 
-case 11:
+case 10:
 YY_RULE_SETUP
-#line 48 "examples/example.lex"
+#line 47 "examples/example.lex"
 ECHO;
 	YY_BREAK
-#line 814 "lex.yy.c"
+#line 808 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(COMMENT):
 case YY_STATE_EOF(FOO):
@@ -1110,7 +1104,7 @@ static int yy_get_next_buffer (void)
 		while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 			{
 			yy_current_state = (int) yy_def[yy_current_state];
-			if ( yy_current_state >= 31 )
+			if ( yy_current_state >= 29 )
 				yy_c = yy_meta[yy_c];
 			}
 		yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
@@ -1138,11 +1132,11 @@ static int yy_get_next_buffer (void)
 	while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 		{
 		yy_current_state = (int) yy_def[yy_current_state];
-		if ( yy_current_state >= 31 )
+		if ( yy_current_state >= 29 )
 			yy_c = yy_meta[yy_c];
 		}
 	yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
-	yy_is_jam = (yy_current_state == 30);
+	yy_is_jam = (yy_current_state == 28);
 
 		return yy_is_jam ? 0 : yy_current_state;
 }
@@ -1818,7 +1812,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 48 "examples/example.lex"
+#line 47 "examples/example.lex"
 
 int main() {
   yylex();

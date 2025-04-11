@@ -1421,3 +1421,920 @@ fn test_complex_match_patterns() {
     assert!(c_state.borrow().is_match());
     assert_eq!(c_state.borrow().match_id(), Some(7));
 }
+
+// ==============================
+// 9. State List Tests
+// ==============================
+
+#[test]
+fn test_adding_states_to_state_list() {
+    // Create a fresh state list
+    let mut list = StateList::new();
+    assert_eq!(list.len(), 0);
+    
+    // Add a basic state
+    let state_a = create_basic_state('a');
+    list.add_state(&state_a);
+    assert_eq!(list.len(), 1);
+    
+    // Add a match state
+    let state_match = State::match_(1);
+    list.add_state(&state_match);
+    assert_eq!(list.len(), 2);
+    
+    // Add a split state (should be flattened)
+    let split = State::split(
+        create_basic_state('b'),
+        create_basic_state('c')
+    );
+    list.add_state(&split);
+    
+    // The split state should add its two out states
+    assert!(list.len() > 2);
+}
+
+#[test]
+fn test_removing_matchs_from_state_list() {
+    // Create a state list with various states
+    let basic = create_basic_state('a');
+    let match1 = State::match_(1);
+    let match2 = State::match_(2);
+    
+    let mut list = StateList::new();
+    list.add_state(&basic);
+    list.add_state(&match1);
+    list.add_state(&match2);
+    
+    // There should be 3 states now
+    assert_eq!(list.len(), 3);
+    
+    // Remove matches
+    let matches = list.remove_matchs();
+    
+    // There should be 1 state left
+    assert_eq!(list.len(), 1);
+    
+    // There should be 2 match states removed
+    assert_eq!(matches.len(), 2);
+    
+    // Verify that all removed states are match states
+    for state in &matches {
+        assert!(State::is_match_ptr(state));
+    }
+}
+
+#[test]
+fn test_merging_two_state_lists() {
+    // Create first list
+    let mut list1 = StateList::new();
+    list1.add_state(&create_basic_state('a'));
+    list1.add_state(&create_basic_state('b'));
+    
+    // Create second list
+    let mut list2 = StateList::new();
+    list2.add_state(&create_basic_state('c'));
+    list2.add_state(&State::match_(1));
+    
+    // Remember initial counts
+    let list1_len = list1.len();
+    let list2_len = list2.len();
+    
+    // Merge list2 into list1
+    list1.merge(list2);
+    
+    // The merged list should have the combined length
+    assert_eq!(list1.len(), list1_len + list2_len);
+}
+
+#[test]
+fn test_state_list_with_duplicate_states() {
+    // Create a state and its clone
+    let state = create_basic_state('a');
+    
+    // Add the same state twice
+    let mut list = StateList::new();
+    list.add_state(&state);
+    list.add_state(&state);  // Should not add duplicate
+    
+    // The list should only contain one instance
+    assert_eq!(list.len(), 1);
+    
+    // Add the same state again with a different instance but same pointer
+    list.add_state(&state.clone());
+    
+    // Should still have just one state
+    assert_eq!(list.len(), 1);
+}
+
+#[test]
+fn test_state_list_equality_comparison() {
+    // Create two identical lists
+    let mut list1 = StateList::new();
+    let mut list2 = StateList::new();
+    
+    let state_a = create_basic_state('a');
+    let state_b = create_basic_state('b');
+    
+    list1.add_state(&state_a);
+    list1.add_state(&state_b);
+    
+    list2.add_state(&state_a);
+    list2.add_state(&state_b);
+    
+    // The lists should be equal
+    assert_eq!(list1, list2);
+    
+    // Add another state to list2
+    list2.add_state(&create_basic_state('c'));
+    
+    // The lists should now be different
+    assert_ne!(list1, list2);
+}
+
+#[test]
+fn test_state_list_with_large_number_of_states() {
+    // Create a large number of states
+    const NUM_STATES: usize = 1000;
+    let mut list = StateList::new();
+    let mut states = Vec::with_capacity(NUM_STATES);
+    
+    // Add states to the vector
+    for i in 0..NUM_STATES {
+        let c = (i % 26 + 'a' as usize) as u8 as char;
+        states.push(create_basic_state(c));
+    }
+    
+    // Measure time to add all states
+    let start = Instant::now();
+    for state in &states {
+        list.add_state(state);
+    }
+    let duration = start.elapsed();
+    
+    // Verify that all states were added
+    assert_eq!(list.len(), NUM_STATES);
+    
+    println!("Adding {} states took: {:?}", NUM_STATES, duration);
+}
+
+// ==============================
+// 10. Integration Tests
+// ==============================
+
+// Helper function to test if a pattern matches a string
+fn pattern_matches(pattern: &str, input: &str) -> bool {
+    // Create the NFA from the pattern
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    
+    // Convert to DFA
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // For a full simulation, we'd need to trace through the DFA transitions
+    // based on each character in the input string, but we'll simplify for tests
+    
+    // For simple patterns, we can check if the pattern's start state transitions
+    // match the first character of the input
+    let start = dfa.start.borrow();
+    
+    if input.is_empty() {
+        // If input is empty, check if the start state is a match state
+        return start.is_match();
+    }
+    
+    let first_char = input.chars().next().unwrap();
+    
+    // Check if there's a transition for the first character
+    if let Some(next_states) = start.next.get(&InputCondition::Char(first_char)) {
+        return next_states.is_matched();
+    }
+    
+    false
+}
+
+#[test]
+fn test_full_regex_to_dfa_pipeline() {
+    // Simple pattern "abc"
+    let pattern = "abc";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Check the DFA structure
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    
+    // Follow 'a' transition
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    // Follow 'b' transition
+    let b_list = a_state.borrow().next.get(&InputCondition::Char('b')).unwrap().clone();
+    let b_state = dfa.memory.get(&b_list).unwrap();
+    
+    // Follow 'c' transition
+    let c_list = b_state.borrow().next.get(&InputCondition::Char('c')).unwrap().clone();
+    let c_state = dfa.memory.get(&c_list).unwrap();
+    
+    // The c state should be a match state
+    assert!(c_state.borrow().is_match());
+}
+
+#[test]
+fn test_with_start_of_line_anchor() {
+    // Pattern "^abc" - starts with abc
+    let pattern = "^abc";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Check the DFA structure
+    let start = dfa.start.borrow();
+    
+    // Should have a StartOfLine transition
+    assert!(start.next.contains_key(&InputCondition::StartOfLine));
+    
+    // Follow start-of-line transition
+    let sol_list = start.next.get(&InputCondition::StartOfLine).unwrap().clone();
+    let sol_state = dfa.memory.get(&sol_list).unwrap();
+    
+    // Then should have an 'a' transition
+    assert!(sol_state.borrow().next.contains_key(&InputCondition::Char('a')));
+}
+
+#[test]
+fn test_with_end_of_line_anchor() {
+    // Pattern "abc$" - ends with abc
+    let pattern = "abc$";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Trace through the DFA until we reach the $ transition
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    let b_list = a_state.borrow().next.get(&InputCondition::Char('b')).unwrap().clone();
+    let b_state = dfa.memory.get(&b_list).unwrap();
+    
+    let c_list = b_state.borrow().next.get(&InputCondition::Char('c')).unwrap().clone();
+    let c_state = dfa.memory.get(&c_list).unwrap();
+    
+    // After 'c', there should be an EndOfLine transition
+    assert!(c_state.borrow().next.contains_key(&InputCondition::EndOfLine));
+    
+    // Following the EndOfLine transition should lead to a match state
+    let eol_list = c_state.borrow().next.get(&InputCondition::EndOfLine).unwrap().clone();
+    let eol_state = dfa.memory.get(&eol_list).unwrap();
+    
+    assert!(eol_state.borrow().is_match());
+}
+
+#[test]
+fn test_with_both_start_and_end_anchors() {
+    // Pattern "^abc$" - exactly abc
+    let pattern = "^abc$";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Check the DFA structure - should start with StartOfLine
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::StartOfLine));
+    
+    // Follow the transitions all the way to the end
+    let sol_list = start.next.get(&InputCondition::StartOfLine).unwrap().clone();
+    let sol_state = dfa.memory.get(&sol_list).unwrap();
+    
+    // Trace through a, b, c
+    let a_list = sol_state.borrow().next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    let b_list = a_state.borrow().next.get(&InputCondition::Char('b')).unwrap().clone();
+    let b_state = dfa.memory.get(&b_list).unwrap();
+    
+    let c_list = b_state.borrow().next.get(&InputCondition::Char('c')).unwrap().clone();
+    let c_state = dfa.memory.get(&c_list).unwrap();
+    
+    // Should end with EndOfLine
+    assert!(c_state.borrow().next.contains_key(&InputCondition::EndOfLine));
+}
+
+#[test]
+fn test_with_character_classes() {
+    // Pattern "[abc]" - one of a, b, or c
+    let pattern = "[abc]";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The start state should have transitions for a, b, and c
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    assert!(start.next.contains_key(&InputCondition::Char('b')));
+    assert!(start.next.contains_key(&InputCondition::Char('c')));
+    
+    // Each transition should lead to a match state
+    for c in ['a', 'b', 'c'] {
+        let next_list = start.next.get(&InputCondition::Char(c)).unwrap().clone();
+        let next_state = dfa.memory.get(&next_list).unwrap();
+        assert!(next_state.borrow().is_match());
+    }
+}
+
+#[test]
+fn test_with_repetition_quantifiers() {
+    // Test with * (zero or more)
+    let pattern1 = "a*";
+    let nfa1 = post2nfa(into_postfix(pattern1), 0).unwrap();
+    let dfa1 = Dfa::new(vec![nfa1]);
+    
+    // The start state should be a match state (for zero occurrences)
+    assert!(dfa1.start.borrow().is_match());
+    
+    // There should be a transition for 'a' that leads back to a match state
+    let start1 = dfa1.start.borrow();
+    assert!(start1.next.contains_key(&InputCondition::Char('a')));
+    
+    // Test with + (one or more)
+    let pattern2 = "a+";
+    let nfa2 = post2nfa(into_postfix(pattern2), 0).unwrap();
+    let dfa2 = Dfa::new(vec![nfa2]);
+    
+    // The start state should NOT be a match state
+    assert!(!dfa2.start.borrow().is_match());
+    
+    // There should be a transition for 'a' that leads to a match state
+    let start2 = dfa2.start.borrow();
+    assert!(start2.next.contains_key(&InputCondition::Char('a')));
+    
+    let a_list = start2.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa2.memory.get(&a_list).unwrap();
+    assert!(a_state.borrow().is_match());
+    
+    // Test with ? (zero or one)
+    let pattern3 = "a?";
+    let nfa3 = post2nfa(into_postfix(pattern3), 0).unwrap();
+    let dfa3 = Dfa::new(vec![nfa3]);
+    
+    // The start state should be a match state
+    assert!(dfa3.start.borrow().is_match());
+    
+    // There should be a transition for 'a' that leads to a match state
+    let start3 = dfa3.start.borrow();
+    assert!(start3.next.contains_key(&InputCondition::Char('a')));
+    
+    let a_list3 = start3.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state3 = dfa3.memory.get(&a_list3).unwrap();
+    assert!(a_state3.borrow().is_match());
+}
+
+#[test]
+fn test_with_alternation() {
+    // Pattern "a|b" - either a or b
+    let pattern = "a|b";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The start state should have transitions for both 'a' and 'b'
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    assert!(start.next.contains_key(&InputCondition::Char('b')));
+    
+    // Both transitions should lead to match states
+    for c in ['a', 'b'] {
+        let next_list = start.next.get(&InputCondition::Char(c)).unwrap().clone();
+        let next_state = dfa.memory.get(&next_list).unwrap();
+        assert!(next_state.borrow().is_match());
+    }
+}
+
+#[test]
+fn test_with_nested_groups() {
+    // Pattern "(a(b|c)d)" - abd or acd
+    let pattern = "(a(b|c)d)";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Trace through the DFA for 'abd'
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    // After 'a', there should be transitions for both 'b' and 'c'
+    assert!(a_state.borrow().next.contains_key(&InputCondition::Char('b')));
+    assert!(a_state.borrow().next.contains_key(&InputCondition::Char('c')));
+    
+    // Follow 'b' transition
+    let b_list = a_state.borrow().next.get(&InputCondition::Char('b')).unwrap().clone();
+    let b_state = dfa.memory.get(&b_list).unwrap();
+    
+    // After 'b', there should be a transition for 'd'
+    assert!(b_state.borrow().next.contains_key(&InputCondition::Char('d')));
+    
+    // Follow 'd' transition
+    let d_list = b_state.borrow().next.get(&InputCondition::Char('d')).unwrap().clone();
+    let d_state = dfa.memory.get(&d_list).unwrap();
+    
+    // After 'd', we should be at a match state
+    assert!(d_state.borrow().is_match());
+}
+
+// Test with complex real-world patterns
+#[test]
+fn test_with_complex_patterns() {
+    // Email pattern (simplified)
+    let email_pattern = "[a-zA-Z0-9]+@[a-zA-Z0-9]+\\.[a-zA-Z]{2,}";
+    let nfa = post2nfa(into_postfix(email_pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Just verify that DFA creation succeeds
+    assert!(dfa.memory.len() > 0);
+    
+    // URL pattern (simplified)
+    let url_pattern = "https?://[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)+(/[a-zA-Z0-9]*)*";
+    let nfa2 = post2nfa(into_postfix(url_pattern), 0).unwrap();
+    let dfa2 = Dfa::new(vec![nfa2]);
+    
+    // Verify DFA creation succeeds
+    assert!(dfa2.memory.len() > 0);
+    
+    // IPv4 address pattern
+    let ip_pattern = "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)";
+    let nfa3 = post2nfa(into_postfix(ip_pattern), 0).unwrap();
+    let dfa3 = Dfa::new(vec![nfa3]);
+    
+    // Verify DFA creation succeeds
+    assert!(dfa3.memory.len() > 0);
+}
+
+// ==============================
+// 11. Error Cases
+// ==============================
+
+#[test]
+fn test_iterative_create_with_invalid_state_list() {
+    // Create an invalid state list with a None state
+    let none_state = State::none();
+    
+    let mut list = StateList::new();
+    list.add_state(&none_state);
+    
+    // Create a DFA - should work even with None state
+    let (result, mem) = DfaState::iterative_create(list);
+    
+    // The result should have no transitions
+    assert_eq!(result.borrow().next.len(), 0);
+    
+    // Memory should contain just the one entry
+    assert_eq!(mem.len(), 1);
+}
+
+#[test]
+fn test_finding_next_states_for_invalid_types() {
+    // Test with None state
+    let none_state = State::none();
+    let current_states = StateList::new();
+    
+    let (next_map, match_list) = DfaState::find_next(&none_state, &current_states);
+    
+    // None state should have no transitions and no matches
+    assert_eq!(next_map.len(), 0);
+    assert_eq!(match_list.len(), 0);
+    
+    // Test with NoMatch state
+    let nomatch_state = State::no_match();
+    
+    let (next_map, match_list) = DfaState::find_next(&nomatch_state, &current_states);
+    
+    // NoMatch state should have no transitions and no matches
+    assert_eq!(next_map.len(), 0);
+    assert_eq!(match_list.len(), 0);
+}
+
+#[test]
+fn test_match_id_with_corrupted_match_states() {
+    // Create a state list with match states
+    let match1 = State::match_(1);
+    let match2 = State::match_(2);
+    
+    // Create a DFA state with these match states
+    let mut list = StateList::new();
+    list.add_state(&match1);
+    list.add_state(&match2);
+    
+    let dfa_state = DfaState::new(0, list);
+    
+    // Get the match ID - should be the minimum (1)
+    let id = dfa_state.match_id();
+    assert_eq!(id, Some(1));
+    
+    // Test with a match state that has a corrupted ID (usize::MAX)
+    let max_match = State::match_(usize::MAX);
+    
+    let mut list = StateList::new();
+    list.add_state(&max_match);
+    
+    let dfa_state = DfaState::new(0, list);
+    
+    // Get the match ID - should still work
+    let id = dfa_state.match_id();
+    assert_eq!(id, Some(usize::MAX));
+}
+
+#[test]
+fn test_compute_next_with_circular_references() {
+    // Create a state that references itself
+    let state = create_basic_state('a');
+    state.borrow_mut().into_basic().unwrap().out.replace(state.clone());
+    
+    let mut list = StateList::new();
+    list.add_state(&state);
+    
+    let mut dfa_state = DfaState::new(0, list);
+    
+    // This should not cause an infinite loop
+    dfa_state.compute_next();
+    
+    // The result should have one transition for 'a'
+    assert_eq!(dfa_state.next.len(), 1);
+    assert!(dfa_state.next.contains_key(&InputCondition::Char('a')));
+    
+    // Create a more complex cycle: a -> b -> c -> a
+    let cycle_states = create_cycle();
+    
+    let mut list = StateList::new();
+    for state in &cycle_states {
+        list.add_state(state);
+    }
+    
+    let mut dfa_state = DfaState::new(0, list);
+    
+    // This should not cause an infinite loop
+    dfa_state.compute_next();
+    
+    // The result should have three transitions
+    assert_eq!(dfa_state.next.len(), 3);
+}
+
+#[test]
+fn test_memory_handling_with_large_machines() {
+    // Create a pattern that will generate a very large state machine
+    // For example, (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)*
+    // This creates a state machine with transitions for all 26 letters
+    
+    let mut pattern = String::from("(");
+    for c in 'a'..='z' {
+        pattern.push(c);
+        pattern.push('|');
+    }
+    // Remove the last '|' and close the group
+    pattern.pop();
+    pattern.push(')');
+    pattern.push('*');
+    
+    // Create the NFA
+    let nfa = post2nfa(into_postfix(&pattern), 0).unwrap();
+    
+    // Create the DFA - this should handle the large machine gracefully
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The DFA should have at least one state
+    assert!(dfa.memory.len() > 0);
+    
+    // The start state should have transitions for all 26 letters
+    let start = dfa.start.borrow();
+    for c in 'a'..='z' {
+        assert!(start.next.contains_key(&InputCondition::Char(c)));
+    }
+}
+
+// ==============================
+// 12. Edge Cases
+// ==============================
+
+#[test]
+fn test_with_minimum_valid_input() {
+    // Simplest valid pattern: a single character
+    let pattern = "a";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The DFA should have a start state with a transition for 'a'
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    
+    // The transition should lead to a match state
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    assert!(a_state.borrow().is_match());
+}
+
+#[test]
+fn test_with_empty_regex_pattern() {
+    // Empty pattern should match empty string
+    // Note: Creating a completely empty pattern might be implementation-specific
+    
+    // We can use a pattern like "a*" which can match empty string
+    let pattern = "a*";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The start state should be a match state
+    assert!(dfa.start.borrow().is_match());
+}
+
+#[test]
+fn test_with_very_large_regex_pattern() {
+    // Create a very long alternation pattern (a|b|c|d|...)* repeated many times
+    let mut pattern = String::new();
+    for i in 0..10 {
+        pattern.push_str("(a|b|c|d|e|f|g|h|i|j)*");
+    }
+    
+    // Create the NFA
+    let nfa = post2nfa(into_postfix(&pattern), 0).unwrap();
+    
+    // Create the DFA - should handle the large pattern without issues
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The DFA should have a valid structure
+    assert!(dfa.memory.len() > 0);
+    assert!(dfa.start.borrow().is_match()); // Start state should match (due to the *)
+}
+
+#[test]
+fn test_with_only_anchors() {
+    // Pattern with only anchors: ^$
+    let pattern = "^$";
+    let result = post2nfa(into_postfix(pattern), 0);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_with_only_character_classes() {
+    // Pattern with only character classes: [a-z][0-9]
+    let pattern = "[a-z][0-9]";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The DFA start state should have transitions for all lowercase letters
+    let start = dfa.start.borrow();
+    for c in 'a'..='z' {
+        assert!(start.next.contains_key(&InputCondition::Char(c)));
+    }
+    
+    // Following any letter transition should lead to a state with digit transitions
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    for digit in '0'..='9' {
+        assert!(a_state.borrow().next.contains_key(&InputCondition::Char(digit)));
+    }
+    
+    // Following any digit transition should lead to a match state
+    let digit_list = a_state.borrow().next.get(&InputCondition::Char('0')).unwrap().clone();
+    let digit_state = dfa.memory.get(&digit_list).unwrap();
+    assert!(digit_state.borrow().is_match());
+}
+
+#[test]
+fn test_states_with_maximum_transitions() {
+    // Create a character class with all printable ASCII characters
+    let mut pattern = String::from("[");
+    for c in ' '..='~' {
+        pattern.push(c);
+    }
+    pattern.push(']');
+    
+    // Create the NFA
+    let nfa = post2nfa(into_postfix(&pattern), 0).unwrap();
+    
+    // Create the DFA
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // The start state should have a large number of transitions
+    let start = dfa.start.borrow();
+    assert!(start.next.len() >= 94); // There are 95 printable ASCII chars
+    
+    // Each transition should lead to a match state
+    for c in ' '..='~' {
+        if start.next.contains_key(&InputCondition::Char(c)) {
+            let next_list = start.next.get(&InputCondition::Char(c)).unwrap().clone();
+            let next_state = dfa.memory.get(&next_list).unwrap();
+            assert!(next_state.borrow().is_match());
+        }
+    }
+}
+
+#[test]
+fn test_complex_cyclical_state_machines() {
+    // Create a pattern with complex cycles: (a(b|c)*d)+
+    let pattern = "(a(b|c)*d)+";
+    let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+    
+    // Create the DFA
+    let dfa = Dfa::new(vec![nfa]);
+    
+    // Trace through a basic path
+    let start = dfa.start.borrow();
+    assert!(start.next.contains_key(&InputCondition::Char('a')));
+    
+    // Follow 'a' transition
+    let a_list = start.next.get(&InputCondition::Char('a')).unwrap().clone();
+    let a_state = dfa.memory.get(&a_list).unwrap();
+    
+    // After 'a', there should be transitions for 'b', 'c', and 'd'
+    assert!(a_state.borrow().next.contains_key(&InputCondition::Char('b')));
+    assert!(a_state.borrow().next.contains_key(&InputCondition::Char('c')));
+    assert!(a_state.borrow().next.contains_key(&InputCondition::Char('d')));
+    
+    // Follow 'd' transition
+    let d_list = a_state.borrow().next.get(&InputCondition::Char('d')).unwrap().clone();
+    let d_state = dfa.memory.get(&d_list).unwrap();
+    
+    // After 'd', we should be at a match state that also has a transition for 'a' (the '+')
+    assert!(d_state.borrow().is_match());
+    assert!(d_state.borrow().next.contains_key(&InputCondition::Char('a')));
+}
+
+// ==============================
+// 13. Performance Tests
+// ==============================
+
+#[test]
+fn test_dfa_creation_time_simple_patterns() {
+    // Test a series of simple patterns with increasing complexity
+    let patterns = [
+        "a",
+        "abc",
+        "a|b|c",
+        "a*b*c*",
+        "a(b|c)d",
+        "(a|b)(c|d)(e|f)",
+    ];
+    
+    for pattern in &patterns {
+        let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+        
+        let start = Instant::now();
+        let dfa = Dfa::new(vec![nfa]);
+        let duration = start.elapsed();
+        
+        println!("Pattern '{}' - DFA creation took: {:?}, states: {}", 
+                 pattern, duration, dfa.memory.len());
+        
+        // Ensure the DFA was created successfully
+        assert!(dfa.memory.len() > 0);
+    }
+}
+
+#[test]
+fn test_dfa_creation_time_complex_patterns() {
+    // Test some more complex patterns
+    let patterns = [
+        "a(b|c)*d",
+        "(a|b|c|d|e)*f",
+        "(a|b)(c|d)(e|f)(g|h)",
+        "a{1,10}b{1,10}c{1,10}",
+        "[a-z][0-9][A-Z]",
+    ];
+    
+    for pattern in &patterns {
+        let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+        
+        let start = Instant::now();
+        let dfa = Dfa::new(vec![nfa]);
+        let duration = start.elapsed();
+        
+        println!("Complex pattern '{}' - DFA creation took: {:?}, states: {}", 
+                 pattern, duration, dfa.memory.len());
+        
+        // Ensure the DFA was created successfully
+        assert!(dfa.memory.len() > 0);
+    }
+}
+
+#[test]
+fn test_memory_usage_for_large_machines() {
+    // Test memory usage with patterns that generate large state machines
+    
+    // Pattern with many states but not too many transitions
+    let pattern1 = "a{1,20}";
+    let nfa1 = post2nfa(into_postfix(pattern1), 0).unwrap();
+    
+    let start = Instant::now();
+    let dfa1 = Dfa::new(vec![nfa1]);
+    let duration1 = start.elapsed();
+    
+    println!("Pattern '{}' - DFA creation took: {:?}, states: {}", 
+             pattern1, duration1, dfa1.memory.len());
+    
+    // Pattern with many transitions
+    let pattern2 = "[a-zA-Z0-9]{1,5}";
+    let nfa2 = post2nfa(into_postfix(pattern2), 0).unwrap();
+    
+    let start = Instant::now();
+    let dfa2 = Dfa::new(vec![nfa2]);
+    let duration2 = start.elapsed();
+    
+    println!("Pattern '{}' - DFA creation took: {:?}, states: {}", 
+             pattern2, duration2, dfa2.memory.len());
+    
+    // Pattern with alternation which increases state count
+    let pattern3 = "(a|b|c|d|e|f|g|h|i|j){1,3}";
+    let nfa3 = post2nfa(into_postfix(pattern3), 0).unwrap();
+    
+    let start = Instant::now();
+    let dfa3 = Dfa::new(vec![nfa3]);
+    let duration3 = start.elapsed();
+    
+    println!("Pattern '{}' - DFA creation took: {:?}, states: {}", 
+             pattern3, duration3, dfa3.memory.len());
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_compare_recursive_vs_iterative_creation() {
+    // Test patterns of increasing complexity
+    let patterns = [
+        "a",
+        "abc",
+        "a|b|c",
+        // "a*b*c*",	// Make the recursive creation stack overflow
+        "a(b|c)d",
+    ];
+    
+    for pattern in &patterns {
+        let nfa = post2nfa(into_postfix(pattern), 0).unwrap();
+        
+        let mut list = StateList::new();
+        list.add_state(&nfa);
+        
+        // Measure recursive creation time
+        let start = Instant::now();
+        let mut memory1 = HashMap::new();
+        let _result1 = DfaState::recursive_create(list.clone(), &mut memory1);
+        let recursive_time = start.elapsed();
+        
+        // Measure iterative creation time
+        let start = Instant::now();
+        let (_result2, memory2) = DfaState::iterative_create(list);
+        let iterative_time = start.elapsed();
+        
+        println!("Pattern '{}' - Recursive: {:?}, Iterative: {:?}, States: {}",
+                 pattern, recursive_time, iterative_time, memory2.len());
+        
+        // Make sure results look valid
+        assert_eq!(memory1.len(), memory2.len());
+    }
+}
+
+#[test]
+fn test_state_transition_computation_performance() {
+    // Create states with varying numbers of transitions
+    
+    // First, test with a small number of transitions
+    let mut small_list = StateList::new();
+    for i in 0..10 {
+        let c = (i as u8 + b'a') as char;
+        small_list.add_state(&create_basic_to_match(c, i));
+    }
+    
+    let mut dfa_small = DfaState::new(0, small_list);
+    
+    let start = Instant::now();
+    dfa_small.compute_next();
+    let small_time = start.elapsed();
+    
+    println!("10 transitions - compute_next took: {:?}", small_time);
+    
+    // Test with a medium number of transitions
+    let mut medium_list = StateList::new();
+    for i in 0..50 {
+        let c = ((i % 26) as u8 + b'a') as char;
+        medium_list.add_state(&create_basic_to_match(c, i));
+    }
+    
+    let mut dfa_medium = DfaState::new(0, medium_list);
+    
+    let start = Instant::now();
+    dfa_medium.compute_next();
+    let medium_time = start.elapsed();
+    
+    println!("50 transitions - compute_next took: {:?}", medium_time);
+    
+    // Test with a large number of transitions
+    let mut large_list = StateList::new();
+    for i in 0..100 {
+        let c = ((i % 26) as u8 + b'a') as char;
+        large_list.add_state(&create_basic_to_match(c, i));
+    }
+    
+    let mut dfa_large = DfaState::new(0, large_list);
+    
+    let start = Instant::now();
+    dfa_large.compute_next();
+    let large_time = start.elapsed();
+    
+    println!("100 transitions - compute_next took: {:?}", large_time);
+}

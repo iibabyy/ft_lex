@@ -1259,13 +1259,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>, id: usize) -> ParsingResult<St
 	if fragments.len() > 1 {
 		return Err(ParsingError::unrecognized_rule());
 	} else if fragments.len() == 0 {
-		if !start_of_line && !end_of_line {
-			return Err(ParsingError::unrecognized_rule());
-		}
-
-		// Only start/end conditions
-		// (remove if start/end conditions whitout pattern are forbidden)
-		fragments.push(Fragment::new(State::match_(id), vec![]));
+		return Err(ParsingError::unrecognized_rule());
     }
 
     let mut e = fragments.pop().unwrap();

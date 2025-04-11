@@ -121,7 +121,7 @@ impl DfaState {
 		start_ptr.borrow_mut().compute_next();
 		
 		for (_, list) in &start_ptr.borrow().next {
-			if !memory.contains_key(list) {
+			if !memory.contains_key(list) && !work_queue.contains(list) {
 				work_queue.push_back(list.clone());
 			}
 		}
@@ -136,7 +136,7 @@ impl DfaState {
 			
 			// Add new states to work queue
 			for (_, list) in &state_ptr.borrow().next {
-				if !memory.contains_key(list) {
+				if !memory.contains_key(list) && !work_queue.contains(list) {
 					work_queue.push_back(list.clone());
 				}
 			}
@@ -176,10 +176,11 @@ impl DfaState {
 			State::Basic(basic) => {
 				if !State::is_none_var_ptr(&basic.out) && !State::is_nomatch_var_ptr(&basic.out) {
 					if let RegexType::CharacterClass(class) = &basic.c {
+						let next_state = basic.out.borrow();
 						for c in class.chars() {
 							let condition = InputCondition::Char(c);
 							let list = next_states.entry(condition).or_insert_with(|| StateList::new());
-							list.add_state(&basic.out.borrow());
+							list.add_state(&next_state);
 						}
 					} else {
 						let condition = InputCondition::Char(basic.c.char().expect("Basic state should have a char"));

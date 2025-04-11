@@ -750,10 +750,7 @@ fn test_post2nfa_empty_expression_with_anchors() {
     postfix.push_back(TokenType::from(RegexType::LineEnd));
     
     let result = post2nfa(postfix, 0);
-    assert!(result.is_ok());
-    
-    let nfa = result.unwrap();
-    assert!(nfa.borrow().is_start_of_line());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -998,7 +995,7 @@ fn test_boundary_cases() {
 	
 	// Test pattern with only line anchors
 	let anchors_only = into_postfix("^$");
-	assert!(post2nfa(anchors_only, 0).is_ok());
+	assert!(post2nfa(anchors_only, 0).is_err());
 	
 	// Test pattern with maximum repetition
 	let max_repetition = into_postfix("a{1000}");
@@ -1364,8 +1361,8 @@ let original = create_nested_split(400);
 	println!("Iterative: {:.2} µs (±{:.2} µs)", avg_iterative, std_dev_iterative);
 	println!("Speedup: {:.2}x", avg_recursive / avg_iterative);
 	
-// Verify the iterative method is not significantly slower than recursive
-assert!((avg_recursive / avg_iterative) > 0.90,
+	// Verify the iterative method is not significantly slower than recursive
+	assert!((avg_recursive / avg_iterative) > 0.90,
 		"Expected iterative method to be at most 10% slower than recursive method");
 }
 
