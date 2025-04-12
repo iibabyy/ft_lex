@@ -18,7 +18,7 @@
 %array
 
 %s COMMENT FOO
-%x STRING
+%x STRING TEST
 
 DIGIT       [0-9]    
 ALPHA      [A-Za-z]
@@ -27,9 +27,17 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 %%
 
 
-<COMMENT>"/a..d"         { BEGIN(COMMENT); }
+"b"         { BEGIN(TEST); }
+"s"         { BEGIN(INITIAL); }
 
-\n printf("BABABA\n");
+^m$a printf("what ?!\n");
+
+\n printf("newline\n");
+
+. printf("peu importe...\n");
+
+<INITIAL>a* printf("BABABA\n");
+<TEST>a* printf("what ?!\n");
 
 <COMMENT>{
   {DIGIT}a        { BEGIN(INITIAL); }

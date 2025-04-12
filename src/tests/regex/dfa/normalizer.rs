@@ -307,3 +307,307 @@ fn test_complex_dfa_normalization() {
         assert!(normalized_dfa.matchs.contains_key(&i));
     }
 }
+
+#[test]
+fn test_simulate_basic_matching() {
+    // Create a simple DFA for pattern "abc"
+    let pattern = "abc";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test exact match
+    let result = simulate("abc", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 3);
+    
+    // Test partial match
+    let result = simulate("ab", &normalized_dfa);
+    assert!(result.is_none());
+    
+    // Test no match
+    let result = simulate("xyz", &normalized_dfa);
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_simulate_with_anchors() {
+    // Create a DFA for pattern "^abc$"
+    let pattern = "^abc$";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test exact match with anchors
+    let result = simulate("abc\n", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 3);
+    
+    // Test no match when not at start/end
+    let result = simulate("xabc", &normalized_dfa);
+    assert!(result.is_none());
+    
+    let result = simulate("abcx", &normalized_dfa);
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_simulate_multiple_matches() {
+    // Create a DFA with multiple patterns: "abc" and "ab"
+    let nfa1 = post2nfa(into_postfix("abc"), 1).unwrap();
+    let nfa2 = post2nfa(into_postfix("ab"), 2).unwrap();
+    let mut dfa = Dfa::new(vec![nfa1, nfa2]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with "abc" - should match the longer pattern
+    let result = simulate("abc", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 3);
+    
+    // Test with "ab" - should match the shorter pattern
+    let result = simulate("ab", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 2);
+}
+
+#[test]
+fn test_simulate_with_newlines() {
+    // Create a DFA for pattern "a\nb"
+    let pattern = "a\nb";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with newline
+    let result = simulate("a\nb", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 3);
+    
+    // Test without newline
+    let result = simulate("ab", &normalized_dfa);
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_simulate_edge_cases() {
+    // Create a DFA for pattern "a*"
+    let pattern = "a*";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+
+    // Test empty string
+    let result = simulate("", &normalized_dfa);
+    assert!(result.is_some());
+	let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 0);
+    
+    // Test very long string
+    let long_string = "a".repeat(1000);
+    let result = simulate(&long_string, &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 1000);
+}
+
+#[test]
+fn test_simulate_with_special_characters() {
+    // Create a DFA for pattern "[a-z]+"
+    let pattern = "[a-z]+";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with lowercase letters
+    let result = simulate("hello", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 5);
+    
+    // Test with uppercase letters (should not match)
+    let result = simulate("HELLO", &normalized_dfa);
+    assert!(result.is_none());
+    
+    // Test with mixed case
+    let result = simulate("hELLO", &normalized_dfa);
+    assert!(result.is_some());
+    let match_result = result.unwrap();
+    assert_eq!(match_result.length(), 1); // Only 'h' should match
+}
+
+#[test]
+fn test_simulate_with_nested_patterns() {
+    // Create a DFA for pattern "a(b|c)d"
+    let pattern = "a(b|c)d";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test valid matches
+    assert!(simulate("abd", &normalized_dfa).is_some());
+    assert!(simulate("acd", &normalized_dfa).is_some());
+    
+    // Test invalid matches
+    assert!(simulate("ad", &normalized_dfa).is_none());
+    assert!(simulate("abcd", &normalized_dfa).is_none());
+    assert!(simulate("abbd", &normalized_dfa).is_none());
+}
+
+#[test]
+fn test_simulate_with_alternations() {
+    // Create a DFA with multiple alternative patterns of different lengths
+    let pattern = "a|abc|abcde";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test all valid matches - should match the longest possible
+    let result = simulate("a", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 1);
+    
+    let result = simulate("abc", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 3);
+    
+    let result = simulate("abcde", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 5);
+    
+    // Test partial match - should still match the correct part
+    let result = simulate("abcdef", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 5);
+}
+
+#[test]
+fn test_simulate_with_complex_repetition() {
+    // Create a DFA with complex repetition
+    let pattern = "a{2,4}";  // matches "aa", "aaa", or "aaaa"
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test valid matches
+    assert!(simulate("aa", &normalized_dfa).is_some());
+    assert!(simulate("aaa", &normalized_dfa).is_some());
+    assert!(simulate("aaaa", &normalized_dfa).is_some());
+    
+    // Test invalid matches
+    assert!(simulate("a", &normalized_dfa).is_none());
+    assert!(simulate("aaaaa", &normalized_dfa).is_some()); // Should match first 4 'a's
+    let result = simulate("aaaaa", &normalized_dfa);
+    assert_eq!(result.unwrap().length(), 4);
+}
+
+#[test]
+fn test_simulate_with_complex_anchors() {
+    // Create a DFA with complex anchored pattern
+    let pattern = "^a.*b$";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test valid matches
+    assert!(simulate("ab\n", &normalized_dfa).is_some());
+    assert!(simulate("axyzb\n", &normalized_dfa).is_some());
+    
+    // Test invalid matches
+    assert!(simulate("ab", &normalized_dfa).is_none());
+    assert!(simulate("xa", &normalized_dfa).is_none());
+    assert!(simulate("abx", &normalized_dfa).is_none());
+    assert!(simulate("xaby", &normalized_dfa).is_none());
+}
+
+#[test]
+fn test_simulate_with_multiline() {
+    // // Test pattern with both start and end anchors
+    let pattern = "^a$";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // // Test with multiline text
+    // let result = simulate("a\nb\nc", &normalized_dfa);
+    // assert!(result.is_some());
+    // assert_eq!(result.unwrap().length(), 1);
+    
+    // Test another multiline pattern
+    let pattern = "^b$";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    let result = simulate("b\nc", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 1);
+}
+
+#[test]
+fn test_simulate_with_overlapping_patterns() {
+    // Create a DFA with overlapping patterns: "ab" and "abc"
+    let nfa1 = post2nfa(into_postfix("ab"), 1).unwrap();
+    let nfa2 = post2nfa(into_postfix("abc"), 2).unwrap();
+    let mut dfa = Dfa::new(vec![nfa1, nfa2]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with "abc" - should match the longer pattern (id 2)
+    let result = simulate("abc", &normalized_dfa);
+    assert!(result.is_some());
+    
+    // TODO: To properly test the match ID, we would need a method to access it
+    assert_eq!(result.unwrap().length(), 3);
+    
+    // Test with "ab" - should match the shorter pattern (id 1)
+    let result = simulate("ab", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 2);
+}
+
+#[test]
+fn test_simulate_with_zero_width_patterns() {
+    // Create a DFA with a pattern that can match zero-width: "a*"
+    let pattern = "a*";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with empty string (should match)
+    let result = simulate("", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 0);
+    
+    // Test with non-matching string (should still match with zero width)
+    let result = simulate("xyz", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 0);
+}
+
+#[test]
+fn test_simulate_with_complex_character_classes() {
+    // Create a DFA with a complex character class: [a-zA-Z0-9_]+
+    let pattern = "[a-zA-Z0-9_]+";
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+    
+    // Test with various valid inputs
+    let result = simulate("abc123_XYZ", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 10);
+    
+    // Test with partially valid input
+    let result = simulate("abc$123", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 3); // Only "abc" should match
+    
+    // Test with invalid input
+    let result = simulate("!@#$%^", &normalized_dfa);
+    assert!(result.is_none());
+}
+

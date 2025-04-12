@@ -319,7 +319,7 @@ fn test_character_class_all() {
 #[test]
 fn test_character_class_parse_simple() {
     let input = "abc]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -333,7 +333,7 @@ fn test_character_class_parse_simple() {
 #[test]
 fn test_character_class_parse_negated() {
     let input = "^abc]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -355,7 +355,7 @@ fn test_character_class_parse_negated() {
 #[test]
 fn test_character_class_parse_range() {
     let input = "a-c]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -371,7 +371,7 @@ fn test_character_class_parse_range() {
 #[test]
 fn test_character_class_parse_dash_at_start() {
     let input = "-abc]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -386,7 +386,7 @@ fn test_character_class_parse_dash_at_start() {
 #[test]
 fn test_character_class_parse_dash_at_end() {
     let input = "abc-]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -401,7 +401,7 @@ fn test_character_class_parse_dash_at_end() {
 #[test]
 fn test_character_class_parse_escaped_chars() {
     let input = "\\]\\-\\^]";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_ok());
@@ -414,7 +414,7 @@ fn test_character_class_parse_escaped_chars() {
 #[test]
 fn test_character_class_parse_unclosed() {
     let input = "abc";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_err());
@@ -425,7 +425,7 @@ fn test_character_class_parse_unclosed() {
 #[test]
 fn test_character_class_parse_escape_at_end() {
     let input = "abc\\";
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
     let result = CharacterClass::parse(&mut chars);
     
     assert!(result.is_err());
@@ -834,12 +834,17 @@ fn test_tokens_with_wildcard() {
     if let RegexType::CharacterClass(class) = &result[0] {
         // Test that the wildcard character class matches all 128 ASCII characters
         for c in (0..128).map(|i| char::from_u32(i).unwrap()) {
-            assert!(class.contains(&c), "Wildcard should match character '{}'", c);
+			if c == '\n' {
+				assert!(!class.contains(&c), "Wildcard should not match newline");
+			} else {	
+				assert!(class.contains(&c), "Wildcard should match character '{}'", c);
+			}
         }
         
-        // It should be equivalent to CharacterClass::all()
-        assert_eq!(class.len(), CharacterClass::all().len());
-        assert!(!class.negated);
+        // It should be equivalent to CharacterClass::all() - 1 (for '\n')
+        assert_eq!(class.len(), CharacterClass::all().len() - 1);
+		// equivalent to [^\n]
+        assert!(class.negated);
     } else {
         panic!("Expected a character class for wildcard");
     }
@@ -848,7 +853,7 @@ fn test_tokens_with_wildcard() {
 #[test]
 fn test_add_backslash() {
     let mut tokens = VecDeque::new();
-    let mut chars = "d".chars();
+    let mut chars = "d".chars().peekable();
     
     Regex::add_backslash(&mut tokens, &mut chars);
 
@@ -869,7 +874,7 @@ fn test_add_backslash() {
 #[test]
 fn test_add_string() {
     let mut tokens = VecDeque::new();
-    let mut chars = "abc\"".chars();
+    let mut chars = "abc\"".chars().peekable();
     
     let result = Regex::add_string(&mut tokens, &mut chars);
 
@@ -886,7 +891,7 @@ fn test_add_string() {
 #[test]
 fn test_add_character_class() {
     let mut tokens = VecDeque::new();
-    let mut chars = "abc]".chars();
+    let mut chars = "abc]".chars().peekable();
     
     let result = Regex::add_character_class(&mut tokens, &mut chars);
     assert!(result.is_ok());
@@ -908,7 +913,7 @@ fn test_add_character_class() {
 #[test]
 fn test_add_quantifier_exact() {
     let mut tokens = VecDeque::new();
-    let mut chars = "5}".chars();
+    let mut chars = "5}".chars().peekable();
     
     let result = Regex::add_quantifier(&mut tokens, &mut chars);
     assert!(result.is_ok());
@@ -919,7 +924,7 @@ fn test_add_quantifier_exact() {
 #[test]
 fn test_add_quantifier_at_least() {
     let mut tokens = VecDeque::new();
-    let mut chars = "5,}".chars();
+    let mut chars = "5,}".chars().peekable();
     
     let result = Regex::add_quantifier(&mut tokens, &mut chars);
     assert!(result.is_ok());
@@ -930,7 +935,7 @@ fn test_add_quantifier_at_least() {
 #[test]
 fn test_add_quantifier_range() {
     let mut tokens = VecDeque::new();
-    let mut chars = "2,5}".chars();
+    let mut chars = "2,5}".chars().peekable();
     
     let result = Regex::add_quantifier(&mut tokens, &mut chars);
     assert!(result.is_ok());
@@ -944,8 +949,6 @@ fn test_into_type() {
     assert_eq!(Regex::into_type('('), RegexType::OpenParenthesis);
     assert_eq!(Regex::into_type(')'), RegexType::CloseParenthesis);
     assert_eq!(Regex::into_type('|'), RegexType::Or);
-    assert_eq!(Regex::into_type('^'), RegexType::LineStart);
-    assert_eq!(Regex::into_type('$'), RegexType::LineEnd);
     assert!(matches!(Regex::into_type('*'), RegexType::Quant(Quantifier::AtLeast(0))));
     assert!(matches!(Regex::into_type('+'), RegexType::Quant(Quantifier::AtLeast(1))));
     assert!(matches!(Regex::into_type('?'), RegexType::Quant(Quantifier::Range(0, 1))));
@@ -1097,7 +1100,7 @@ fn test_other_escape_sequences() {
 #[test]
 fn test_escape_sequences_in_character_class() {
     // Test escape sequences inside character classes
-    let class = CharacterClass::parse(&mut "\\n\\r\\t]".chars()).unwrap();
+    let class = CharacterClass::parse(&mut "\\n\\r\\t]".chars().peekable()).unwrap();
 
 	assert!(class.contains(&'\n'));
 	assert!(class.contains(&'\r'));

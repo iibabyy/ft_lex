@@ -1,4 +1,5 @@
 use std::collections::{HashSet, VecDeque};
+use std::iter::Peekable;
 use std::str::Chars;
 use std::fmt;
 
@@ -296,7 +297,7 @@ impl CharacterClass {
     }
 
     // Parse a character class from a string
-    pub fn parse(chars: &mut std::str::Chars) -> ParsingResult<Self> {
+    pub fn parse(chars: &mut Peekable<Chars>) -> ParsingResult<Self> {
         let mut class = Self::new();
         let mut prev_char: Option<char> = None;
 
@@ -514,15 +515,38 @@ impl Regex {
 
     pub fn tokens(input: &str) -> ParsingResult<VecDeque<RegexType>> {
         let mut tokens = VecDeque::with_capacity(input.len());
-        let mut chars = input.chars();
+        let mut chars = input.chars().peekable();
 
         while let Some(c) = chars.next() {
             match c {
                 '"' => Self::add_string(&mut tokens, &mut chars)?,
-                '[' => Self::add_character_class(&mut tokens, &mut chars)?,
-                '{' => Self::add_quantifier(&mut tokens, &mut chars)?,
-                '\\' => Self::add_backslash(&mut tokens, &mut chars),
-                '.' => tokens.push_back(RegexType::CharacterClass(CharacterClass::all())),
+
+				'[' => Self::add_character_class(&mut tokens, &mut chars)?,
+
+				'{' => Self::add_quantifier(&mut tokens, &mut chars)?,
+
+
+				'\\' => Self::add_backslash(&mut tokens, &mut chars),
+
+				'.' => tokens.push_back(RegexType::CharacterClass(CharacterClass::from_single('\n').negated())),
+
+				'^' => {
+					if tokens.is_empty() {
+						// if at the start of the string -> line start
+						tokens.push_back(RegexType::LineStart);
+					} else {
+						tokens.push_back(RegexType::Char('^'));
+					}
+				},
+
+				'$' => {
+					if chars.peek().is_none() {
+						// if at the end of the string -> line end
+						tokens.push_back(RegexType::LineEnd);
+					} else {
+						tokens.push_back(RegexType::Char('$'));
+					}
+				},
 
                 c => tokens.push_back(Self::into_type(c)),
             }
@@ -533,7 +557,7 @@ impl Regex {
 
     pub fn add_backslash(
         tokens: &mut VecDeque<RegexType>,
-        chars: &mut Chars<'_>,
+        chars: &mut Peekable<Chars<'_>>,
     ) {
         let next_c = chars.next().unwrap_or('\\');
 
@@ -554,7 +578,7 @@ impl Regex {
     /// Handling litterals (trick: transform litterals into parenthesis of chars)
     pub fn add_string(
         tokens: &mut VecDeque<RegexType>,
-        chars: &mut Chars<'_>,
+        chars: &mut Peekable<Chars<'_>>,
     ) -> ParsingResult<()> {
         // Open parenthesis replace open '"'
         tokens.push_back(RegexType::OpenParenthesis);
@@ -583,7 +607,7 @@ impl Regex {
     /// Handle character classes ([...])
     pub fn add_character_class(
         tokens: &mut VecDeque<RegexType>,
-        chars: &mut Chars<'_>,
+        chars: &mut Peekable<Chars<'_>>,
     ) -> ParsingResult<()> {
         let class = CharacterClass::parse(chars)?;
         tokens.push_back(RegexType::CharacterClass(class));
@@ -593,7 +617,7 @@ impl Regex {
     /// Handle quantifiers ({n}, {n,}, {n,m})
     pub fn add_quantifier(
         tokens: &mut VecDeque<RegexType>,
-        chars: &mut Chars<'_>,
+        chars: &mut Peekable<Chars<'_>>,
     ) -> ParsingResult<()> {
         let mut digits1 = String::new();
         let mut digits2 = String::new();
@@ -663,10 +687,6 @@ impl Regex {
             '(' => RegexType::OpenParenthesis,
 
             ')' => RegexType::CloseParenthesis,
-
-            '^' => RegexType::LineStart,
-
-            '$' => RegexType::LineEnd,
 
             '?' => RegexType::Quant(Quantifier::Range(0, 1)),
 

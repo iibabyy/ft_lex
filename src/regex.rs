@@ -55,7 +55,7 @@ pub fn print_state_structure(nfa: &StatePtr, title: &str) {
 	let mut visited = HashSet::new();
 	
 	// Start with the root state
-	stack.push((nfa.clone(), 0, String::from("root")));
+	stack.push((nfa.clone(), 0, String::from("root: ")));
 	
 	while let Some((state, depth, path)) = stack.pop() {
 		let state_ptr = &*state.borrow() as *const State;
