@@ -248,12 +248,15 @@ impl Utils {
 
     pub fn backslashed(c: char) -> char {
         match c {
-            'n' => '\n',
-            't' => '\t',
-            'r' => '\r',
-            'f' => '\u{000C}', // Form feed
-            'v' => '\u{000B}', // Vertical tab
             '0' => '\0',       // Null character
+            'a' => 7 as char, // Alarm
+            'b' => 8 as char, // Backspace
+            't' => '\t',
+            'n' => '\n',
+            'v' => 11 as char, // Vertical tab
+            'f' => 12 as char, // Form feed
+            'r' => '\r',
+
             _ => c,
         }
     }

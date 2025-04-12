@@ -1223,7 +1223,7 @@ pub fn post2nfa(mut postfix: VecDeque<TokenType>, id: usize) -> ParsingResult<St
             RegexType::Quant(quantifier) => {
                 let e = fragments
                     .pop()
-                    .ok_or(ParsingError::unrecognized_rule().because("Unexpected '?'"))?;
+                    .ok_or(ParsingError::unrecognized_rule().because("Unexpected quantifier"))?;
 
 				fragments.push(e.quantify(&quantifier));
 			}

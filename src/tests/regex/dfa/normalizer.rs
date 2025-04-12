@@ -611,3 +611,95 @@ fn test_simulate_with_complex_character_classes() {
     assert!(result.is_none());
 }
 
+
+fn test_simulate(pattern: &str, valid_matches: Vec<&str>, invalid_matches: Vec<&str>) {
+    // Create a DFA with complex anchored pattern
+	dbg!(into_postfix(pattern));
+    let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
+    let mut dfa = Dfa::new(vec![nfa]);
+    let normalized_dfa = NormalizedDfa::from(&mut dfa);
+
+    // Test valid matches
+	for match_ in valid_matches {
+		let expected_length = match_.len() - (pattern.chars().last().unwrap() == '$').then_some(1).unwrap_or(0);
+		
+		let result = simulate(match_, &normalized_dfa);
+		assert!(result.is_some(),
+			"Expected match for '{}', but got no match",
+			match_
+		);
+
+		let result = result.unwrap();
+		assert!(result.length() == expected_length,
+			"Expected length {} for match '{}', but got {}",
+			expected_length,
+			match_,
+			result.length()
+		);
+	}
+
+    // Test invalid matches
+	for match_ in invalid_matches {
+		let expected_length = match_.len() - (pattern.chars().last().unwrap() == '$').then_some(1).unwrap_or(0);
+		
+		let result = simulate(match_, &normalized_dfa);
+		
+		if result.is_some() {
+			let result = result.unwrap();
+			assert!(result.length() != expected_length,
+				"Expected no (complete) match for '{}', but got a match of length {}",
+				match_,
+				result.length()
+			);
+		}
+	}
+}
+
+
+#[test]
+fn test_simulate_very_complex_pattern() {
+    let patterns: Vec<(&str, Vec<&str>, Vec<&str>)> = vec![
+        // Nested groups with alternation
+        (
+            "^(a+|b*)c(d|e)*(f{2,5}|g+)$",	// pattern
+            vec!["aacddff\n", "bceeggg\n", "aacddeefff\n"],	// valid matches
+            vec!["aacdfg\n", "bceg", "aacddeef\n"]	// invalid matches
+        ),
+        // Complex character classes with ranges
+        (
+            "\\w*", // word character
+            vec!["abc123_XYZ", "a1b2c3_", "ABC_123"],
+            vec!["-abc$123", "!@#$%^", "^abc-123"]
+        ),
+        // Complex boundaries
+        (
+            "\\w+([-']\\w+)*",
+            vec!["hello-world", "don't", "test-case-123"],
+            vec!["-hello", "world-", "test--case"]
+        ),
+        // Complex alternation with quantifiers
+        (
+            "(a{2,4}|b+)(c|d){1,3}",
+            vec!["aac", "bbbd", "aaaacd", "bcc"],
+            vec!["a", "aaaaac", "bdddd"]
+        ),
+        // Nested optional groups
+        (
+            "a(b(c(d)?)?)?",
+            vec!["a", "ab", "abc", "abcd"],
+            vec!["ac", "abd", "abdc", "bcd"]
+        ),
+        // Complex character class combinations
+        (
+            "[a-z\\-\\.\\+]{1,25}@[a-z]{2,}(\\.([a-z]{2,})){1,3}",
+            vec!["test@example.com", "user.name+tag@sub.domain.co.uk"],
+            vec!["@example.com", "test@.com", "test@example", "test@example..com"]
+        )
+    ];
+
+    for (regex, valid_matches, invalid_matches) in patterns {
+        test_simulate(regex, valid_matches, invalid_matches);
+    }
+}
+
+
