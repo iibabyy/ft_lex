@@ -1,4 +1,0 @@
-^ just means after the start of a line (after start of file or '\n')
-$ just mean before a '\n' (not before eof)
-^/$ are basic litterals if not a the start/end of the regex
-. (any) is anything besides '\n'
