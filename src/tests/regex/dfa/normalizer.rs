@@ -526,16 +526,16 @@ fn test_simulate_with_complex_anchors() {
 
 #[test]
 fn test_simulate_with_multiline() {
-    // // Test pattern with both start and end anchors
+    // Test pattern with both start and end anchors
     let pattern = "^a$";
     let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
     let mut dfa = Dfa::new(vec![nfa]);
     let normalized_dfa = NormalizedDfa::from(&mut dfa);
     
-    // // Test with multiline text
-    // let result = simulate("a\nb\nc", &normalized_dfa);
-    // assert!(result.is_some());
-    // assert_eq!(result.unwrap().length(), 1);
+    // Test with multiline text
+    let result = simulate("a\nb\nc", &normalized_dfa);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().length(), 1);
     
     // Test another multiline pattern
     let pattern = "^b$";
