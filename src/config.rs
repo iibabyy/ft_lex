@@ -47,6 +47,9 @@ impl Config {
 
                 "-n" => config.no_stats_summary = true,
 
+                // stdin
+                "-" => config.args.push(None),
+
                 arg if arg.starts_with("-") => return Err(format!("Invalid option: {arg}")),
 
                 _ => config.args.push(Some(arg))
