@@ -19,38 +19,20 @@ pub struct Config {
     /// None if stdin
     pub args: Vec<Option<String>>,
 
-    /* OPTIONS */
-    /// -o FILE / --output-file=FILE
-    pub output_file: Option<String>,
-
     /// -t / --stdout
     pub stdout: bool,
 
-    /// -e LANG / --emit=LANG
-    pub target_language: TargetLanguage,
+    /// -v
+    /// Write a summary of lex statistics to the standard output. If the -t option is specified and -n is not specified, this report shall be written to standard error. If table sizes are specified in the lex source code, and if the -n option is not specified, the -v option may be enabled.
+    pub summary: bool,
 
-    /// replace yy (e.g yylex -> {STRING}lex)
-    /// -P STRING / --prefix=STRING
-    pub prefix: String,
-
-    /// do not include <unistd.h>
-    /// --nounistd
-    pub no_unistd: bool,
-
-    // do not generate those functions
-    // --noFUNCTION
-    pub no_functions: Vec<String>,
-
-    // -i --case-insensitive
-    pub case_insensitive: bool,
-
-    // track line count in yylineno
-    // --yylineno
-    pub yylineno: bool,
+    /// -n
+    /// Suppress the summary of statistics usually written with the -v option. If no table sizes are specified in the lex source code and the -v option is not specified, then -n is implied
+    pub no_stats_summary: bool,
 }
 
 impl Config {
-    pub(super) fn init() -> Self {
+    pub(super) fn init() -> Result<Self, String> {
         let mut args = env::args();
 
         let _executable = args.next();
@@ -58,25 +40,17 @@ impl Config {
         let mut config = Self::default();
 
         for arg in args {
-            if arg == "-" {
-                // stdin input
-                config.args.push(None);
-                continue;
-            }
+            match arg.as_str() {
+                "-t" | "--stdout" => config.stdout = true,
 
-            if arg.starts_with("--") {
-                // TODO: add option
-                eprintln!("Long argument detected ({}) -> skip", arg);
-                continue;
-            }
+                "-v" | "--verbose" => config.summary = true,
 
-            if arg.starts_with("-") {
-                // TODO: add option
-                eprintln!("Short argument detected ({}) -> skip", arg);
-                continue;
-            }
+                "-n" => config.no_stats_summary = true,
 
-            config.args.push(Some(arg));
+                arg if arg.starts_with("-") => return Err(format!("Invalid option: {arg}")),
+
+                _ => config.args.push(Some(arg))
+            }
         }
 
         if config.args.is_empty() {
@@ -84,6 +58,6 @@ impl Config {
             config.args.push(None);
         }
 
-        config
+        Ok(config)
     }
 }
