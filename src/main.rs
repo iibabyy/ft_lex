@@ -7,8 +7,8 @@ mod tests;
 mod parsing;
 use parsing::*;
 
-mod arg;
-use arg::*;
+mod config;
+use config::*;
 
 mod regex;
 use regex::*;
