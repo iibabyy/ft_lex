@@ -17,15 +17,15 @@ use regex::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 
-    // let config = Config::init();
+    let config = Config::init()?;
 
-    // // dbg!(&config);
+    // dbg!(&config);
 
-    // let mut parser = Parsing::new()?;
+    let mut parser = Parsing::new()?;
 
-    // parser.parse(&config)?;
+    parser.parse(&config)?;
 
-    // dbg!(parser.definitions);
+    dbg!(parser.definitions);
 
     Ok(())
 }

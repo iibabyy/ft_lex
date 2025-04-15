@@ -76,10 +76,10 @@ pub enum DefinitionType {
 pub enum TableSizeDeclaration {
     Positions,
     Transitions,
-    Statesets,
-    Equivalence,
-    Characters,
-    Outputfiles,
+    States,
+    ParseTreeNodes,
+    PackedCharacterClass,
+    OutputArraySize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,14 +99,14 @@ impl TryFrom<String> for TableSizeDeclaration {
 impl TryFrom<&str> for TableSizeDeclaration {
     type Error = ();
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
+    fn try_from(flag: &str) -> Result<Self, Self::Error> {
+        match flag {
             "p" => Ok(Self::Positions),
-            "n" => Ok(Self::Transitions),
-            "e" => Ok(Self::Equivalence),
-            "a" => Ok(Self::Statesets),
-            "k" => Ok(Self::Characters),
-            "o" => Ok(Self::Outputfiles),
+            "n" => Ok(Self::States),
+            "a" => Ok(Self::Transitions),
+            "e" => Ok(Self::ParseTreeNodes),
+            "k" => Ok(Self::PackedCharacterClass),
+            "o" => Ok(Self::OutputArraySize),
             _ => Err(()),
         }
     }
@@ -116,13 +116,26 @@ impl ToString for TableSizeDeclaration {
     fn to_string(&self) -> String {
         match self {
             TableSizeDeclaration::Positions => "%p",
-            TableSizeDeclaration::Transitions => "%n",
-            TableSizeDeclaration::Equivalence => "%e",
-            TableSizeDeclaration::Statesets => "%a",
-            TableSizeDeclaration::Characters => "%k",
-            TableSizeDeclaration::Outputfiles => "%o",
+            TableSizeDeclaration::States => "%n",
+            TableSizeDeclaration::Transitions => "%a",
+            TableSizeDeclaration::ParseTreeNodes => "%e",
+            TableSizeDeclaration::PackedCharacterClass => "%k",
+            TableSizeDeclaration::OutputArraySize => "%o",
         }
         .to_string()
+    }
+}
+
+impl TableSizeDeclaration {
+    pub fn minimum_value(&self) -> usize {
+        match self {
+            TableSizeDeclaration::Positions => 2500,
+            TableSizeDeclaration::States => 500,
+            TableSizeDeclaration::Transitions => 2000,
+            TableSizeDeclaration::ParseTreeNodes => 1000,
+            TableSizeDeclaration::PackedCharacterClass => 1000,
+            TableSizeDeclaration::OutputArraySize => 3000,
+        }
     }
 }
 
@@ -204,10 +217,7 @@ impl Definitions {
                     for name in states_names {
                         if let Some(_) = self.states.insert(name.clone(), state_type) {
                             // Duplicate Value
-                            return Err(ParsingError::syntax(format!(
-                                "start condition {} declared twice",
-                                name
-                            )));
+                            return ParsingError::syntax(format!("start condition {} declared twice", name)).into();
                         }
                     }
                 }
@@ -267,8 +277,9 @@ impl Definitions {
 
             // Validate that the name follows C naming conventions
             if !Utils::is_iso_C_normed(split.0) {
-                return Err(ParsingError::syntax(format!("`{}`", split.0))
-                    .because("name must be iso-C normed"));
+                return ParsingError::syntax(format!("`{}`", split.0))
+                    .because("name must be iso-C normed")
+                    .into();
             }
 
             return Ok(DefinitionType::Substitute(
@@ -287,9 +298,9 @@ impl Definitions {
 
             // Check if the closing delimiter was found or if we reached EOF
             if !found {
-                return Err(ParsingError::end_of_file()
+                return ParsingError::end_of_file()
                     .because(format!("expected close matching delimiter for open delimiter at line {open_dilimiter_index}"))
-                );
+                    .into();
             }
 
             // Join the lines with newlines and add extra newlines at start and end
@@ -308,7 +319,7 @@ impl Definitions {
 
         // The remaining cases all start with '%' - flag-based declarations
         if first_char != '%' {
-            return Err(ParsingError::unexpected_token(first_char));
+            return ParsingError::unexpected_token(first_char).into();
         }
 
         // Split the line into words after the % character
@@ -328,9 +339,9 @@ impl Definitions {
             // State declarations (%s for inclusive, %x for exclusive)
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
-                    return Err(
-                        ParsingError::end_of_line().because(format!("`%{flag} {{STATE_NAME}}`"))
-                    );
+                    return ParsingError::end_of_line()
+                        .because(format!("`%{flag} {{STATE_NAME}}`"))
+                        .into();
                 }
 
                 let states_type = StateType::try_from(flag.as_str()).unwrap();
@@ -341,8 +352,9 @@ impl Definitions {
                 // Validate that all state names follow C naming conventions
                 for name in &split {
                     if !Utils::is_iso_C_normed(name) {
-                        return Err(ParsingError::syntax(format!("`{name}`"))
-                            .because("states must be iso-C normed"));
+                        return ParsingError::syntax(format!("`{name}`"))
+                            .because("states must be iso-C normed")
+                            .into();
                     }
                 }
 
@@ -353,14 +365,20 @@ impl Definitions {
                 // Ensure the format is correct: %flag number
                 Self::check_split_size(&split, 2, format!("`%{flag} {{POSITIVE_NUMBER}}`"))?;
 
-                // Parse the size as a positive number
-                let size = split[1].as_str().parse::<usize>().map_err(|err| {
+                // Parse the value as a positive number
+                let value = split[1].as_str().parse::<usize>().map_err(|err| {
                     ParsingError::invalid_number(&split[1]).because(err.to_string())
                 })?;
 
+                let declaration = TableSizeDeclaration::try_from(flag).unwrap();
+
+                if value < declaration.minimum_value() {
+                    return ParsingError::warning(format!("minimum value: {value}")).into()
+                }
+
                 return Ok(DefinitionType::TableSize(
-                    TableSizeDeclaration::try_from(flag).unwrap(),
-                    size,
+                    declaration,
+                    value,
                 ));
             }
             // Type declarations (%array or %pointer)
@@ -372,7 +390,7 @@ impl Definitions {
                 ));
             }
             // Any other flag is an error
-            _ => return Err(ParsingError::invalid_flag(format!("%{flag}"))),
+            _ => return ParsingError::invalid_flag(format!("%{flag}")).into(),
         }
     }
 
@@ -406,15 +424,16 @@ impl Definitions {
         let expected_err_msg = expected_err_msg.to_string();
 
         if split.len() < expected {
-            return Err(
-                ParsingError::end_of_line().because(format!("expected: {expected_err_msg}"))
-            );
+            return ParsingError::end_of_line()
+                .because(format!("expected: {expected_err_msg}"))
+                .into();
         }
 
         if split.len() > expected {
-            return Err(ParsingError::unexpected_token(&split[expected])
+            return ParsingError::unexpected_token(&split[expected])
                 .because("expected")
-                .because(expected_err_msg));
+                .because(expected_err_msg)
+                .into();
         }
 
         Ok(())

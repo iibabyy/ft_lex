@@ -23,9 +23,6 @@ pub struct ParsingError {
     /// The line number where the error occurred, if applicable
     line_index: Option<usize>,
 
-    /// The character position where the error occurred, if applicable
-    char_index: Option<usize>,
-
     /// The type of error that occurred
     pub type_: ParsingErrorType,
 
@@ -33,12 +30,18 @@ pub struct ParsingError {
     pub causes: Vec<String>,
 }
 
+impl<T> Into<ParsingResult<T>> for ParsingError {
+    fn into(self) -> ParsingResult<T> {
+        Err(self)
+    }
+}
+
 impl std::error::Error for ParsingError {}
 
 impl Eq for ParsingError {}
 impl PartialEq for ParsingError {
     fn eq(&self, other: &Self) -> bool {
-        self.char_index == other.char_index
+        self.line_index == other.line_index
     }
 }
 
@@ -48,9 +51,10 @@ impl Ord for ParsingError {
         self.partial_cmp(other).unwrap()
     }
 }
+
 impl PartialOrd for ParsingError {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.char_index.cmp(&other.char_index))
+        Some(self.line_index.cmp(&other.line_index))
     }
 }
 
@@ -64,20 +68,16 @@ impl std::fmt::Display for ParsingError {
         };
 
         let line_and_char_index = if self.line_index.is_some() {
-            let char_index = self
-                .char_index
-                .and_then(|index| Some(format!(":{index}")))
-                .unwrap_or("".to_string());
 
-            format!(":{}{}", self.line_index.as_ref().unwrap() + 1, char_index)
+            &format!("{}:", self.line_index.as_ref().unwrap() + 1)
         } else {
-            "".to_string()
+            ""
         };
 
         let file = if self.file.is_some() {
-            format!("{}{}", self.file.as_ref().unwrap(), line_and_char_index)
+            &format!("{}:{} ", self.file.as_ref().unwrap(), line_and_char_index)
         } else {
-            "".to_string()
+            ""
         };
 
         let mut causes = String::new();
@@ -87,7 +87,11 @@ impl std::fmt::Display for ParsingError {
             causes.push_str(cause);
         });
 
-        write!(f, "{}: {}{}", file, message, causes)
+        if matches!(self, ParsingError{ type_: ParsingErrorType::Warning(_), .. }) {
+            write!(f, "WARNING: {}{}{}", file, message, causes)
+        } else {
+            write!(f, "{}: {}{}", file, message, causes)
+        }
     }
 }
 
@@ -101,7 +105,6 @@ impl ParsingError {
     /// Creates a new parsing error from an I/O error.
     pub fn io(err: std::io::Error) -> Self {
         Self {
-            char_index: None,
             line_index: None,
             file: None,
             type_: ParsingErrorType::Io(err),
@@ -133,7 +136,6 @@ impl ParsingError {
     /// Creates a new syntax error with the given message.
     pub fn syntax(err: impl ToString) -> Self {
         Self {
-            char_index: None,
             line_index: None,
             file: None,
             type_: ParsingErrorType::Syntax(err.to_string()),
@@ -144,7 +146,6 @@ impl ParsingError {
     /// Creates a new syntax error with the given message.
     pub fn warning(err: impl ToString) -> Self {
         Self {
-            char_index: None,
             line_index: None,
             file: None,
             type_: ParsingErrorType::Warning(err.to_string()),
@@ -155,7 +156,6 @@ impl ParsingError {
     /// Creates a new syntax error with the given message.
     fn eof(err: impl ToString) -> Self {
         Self {
-            char_index: None,
             line_index: None,
             file: None,
             type_: ParsingErrorType::UnexpectedEof(err.to_string()),
@@ -172,12 +172,6 @@ impl ParsingError {
     /// Adds line number context to the error.
     pub fn line(mut self, line_index: usize) -> Self {
         self.line_index = Some(line_index);
-        self
-    }
-
-    /// Adds character position context to the error.
-    pub fn char(mut self, char_index: usize) -> Self {
-        self.char_index = Some(char_index);
         self
     }
 
