@@ -19,3 +19,8 @@ target/
 # Added by cargo
 
 /target
+
+test.c
+test
+
+lex.yy.c
