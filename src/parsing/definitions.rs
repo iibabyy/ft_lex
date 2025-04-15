@@ -248,7 +248,8 @@ impl Definitions {
     /// - Empty lines
     /// - Section delimiter
     fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<DefinitionType> {
-        let line = reader.line()?.ok_or(ParsingError::end_of_file())?;
+        let line = reader.line()?
+            .ok_or(ParsingError::end_of_file())?;
 
         if line.is_empty() {
             return Ok(DefinitionType::Empty);

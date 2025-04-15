@@ -39,7 +39,7 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 <INITIAL>a* printf("BABABA\n");
 <TEST>a* printf("what ?!\n");
 
-<COMMENT>{
+<1COMMENT>{
   {DIGIT}a        { BEGIN(INITIAL); }
 }
 

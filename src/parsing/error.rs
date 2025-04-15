@@ -218,6 +218,12 @@ impl ParsingError {
         ParsingError::syntax(err)
     }
 
+    pub fn bad_start_condition() -> ParsingError {
+        let cause = "bad start condition";
+
+        ParsingError::syntax(cause)
+    }
+
     /// Creates an error for an invalid number format.
     pub fn invalid_number(number: impl ToString) -> Self {
         let err = format!("invalid number: `{}`", number.to_string());
