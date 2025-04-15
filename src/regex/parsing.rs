@@ -292,7 +292,7 @@ impl CharacterClass {
 
             Ok(())
         } else {
-            Err(ParsingError::unrecognized_rule().because("negative range in character class"))
+            ParsingError::unrecognized_rule().because("negative range in character class").into()
         }
     }
 
@@ -326,8 +326,9 @@ impl CharacterClass {
                                 prev_char = None;
                             }
                         } else {
-                            return Err(ParsingError::unrecognized_rule()
-                                .because("Unclosed character class"));
+                            return ParsingError::unrecognized_rule()
+                                .because("Unclosed character class")
+                                .into();
                         }
                     } else {
                         // '-' at the beginning is a literal character
@@ -341,9 +342,9 @@ impl CharacterClass {
                         class.add_char(interpreted);
                         prev_char = Some(interpreted);
                     } else {
-                        return Err(ParsingError::unrecognized_rule()
-                            .because("Escape sequence at end of character class"));
-                    }
+                        return ParsingError::unrecognized_rule()
+                            .because("Escape sequence at end of character class")
+                        .into();                    }
                 }
 
                 c => {
@@ -353,7 +354,9 @@ impl CharacterClass {
             }
         }
 
-        Err(ParsingError::unrecognized_rule().because("Unclosed character class"))
+        ParsingError::unrecognized_rule()
+            .because("Unclosed character class")
+            .into()
     }
 
     // Compatibility methods to create instances
