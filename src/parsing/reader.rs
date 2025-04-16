@@ -18,6 +18,8 @@ pub struct Reader<R: Read> {
     end_of_line: bool,
 
     rest: VecDeque<char>,
+
+	peek: Option<u8>,
 }
 
 impl<R: Read> Reader<R> {
@@ -32,6 +34,7 @@ impl<R: Read> Reader<R> {
             line_index: 0,
             end_of_line: false,
             rest: VecDeque::new(),
+			peek: None,
         })
     }
 
@@ -64,8 +67,8 @@ impl<R: Read> Reader<R> {
                 if char == '\n' as u8 {
                     return Ok(Some(line));
                 }
-
                 line.push(char as char);
+
             } else {
                 if line.is_empty() == false {
                     return Ok(Some(line));
@@ -99,7 +102,13 @@ impl<R: Read> Reader<R> {
     }
 
     pub fn peek(&mut self) -> Option<Result<&u8, &io::Error>> {
-        self.chars.peek().and_then(|res| Some(res.as_ref()))
+		if self.rest.is_empty() {
+			self.chars.peek().and_then(|res| Some(res.as_ref()))
+		} else {
+			self.peek = Some(*self.rest.front().unwrap() as u8);
+
+			Some(Ok(self.peek.as_ref().unwrap()))
+		}
     }
 }
 

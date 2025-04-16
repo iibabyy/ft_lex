@@ -313,3 +313,177 @@ fn test_read_one_regular_expression_no_input() {
     let err = result.unwrap_err();
     assert!(err.message().contains("unexpected end of file"));
 }
+
+#[test]
+fn test_get_regular_expression_simple() {
+    let mut reader = reader_from_str("[a-z]+ ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "[a-z]+");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_tab() {
+    let mut reader = reader_from_str("abc\t");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "abc");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_newline() {
+    let mut reader = reader_from_str("xyz\n");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "xyz");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_escaped_whitespace() {
+    let mut reader = reader_from_str("a\\ b\\ c ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "a\\ b\\ c");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_escaped_slash() {
+    let mut reader = reader_from_str("a\\/b ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "a\\/b");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_complex() {
+    let mut reader = reader_from_str("[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\) ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\)");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_quantifiers() {
+    let mut reader = reader_from_str("a+b*c? ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "a+b*c?");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_groups() {
+    let mut reader = reader_from_str("(ab|cd)+ ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "(ab|cd)+");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_character_sets() {
+    let mut reader = reader_from_str("[^abc][0-9] ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "[^abc][0-9]");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_special_chars() {
+    let mut reader = reader_from_str("\\w+\\d+\\s+ ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "\\w+\\d+\\s+");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_empty() {
+    let mut reader = reader_from_str(" ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "");
+    assert_eq!(result.1, None);
+}
+
+#[test]
+fn test_get_regular_expression_with_trailing_section() {
+    let mut reader = reader_from_str("abc{section} ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "abc");
+    assert_eq!(result.1, Some("section".to_string()));
+}
+
+#[test]
+fn test_get_regular_expression_no_whitespace() {
+    let mut reader = reader_from_str("abc");
+    
+    let result = Rules::get_regular_expression(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("unexpected end of file"));
+}
+
+#[test]
+fn test_get_regular_expression_with_slash_delimiter() {
+    let mut reader = reader_from_str("abc/");
+    
+    let result = Rules::get_regular_expression(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("expected whitespace delimiter"));
+}
+
+#[test]
+fn test_get_regular_expression_no_input() {
+    let mut reader = reader_from_str("");
+    
+    let result = Rules::get_regular_expression(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("unexpected end of file"));
+}
+
+#[test]
+fn test_get_regular_expression_with_section() {
+    let mut reader = reader_from_str("first/second ");
+    
+    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    
+    assert_eq!(result.0, "first");
+    assert_eq!(result.1, Some("second".to_string()));
+}
+
+#[test]
+fn test_get_regular_expression_with_duplicate_slash() {
+    let mut reader = reader_from_str("first/second/");
+    
+    let result = Rules::get_regular_expression(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("duplicate '/'"));
+}
