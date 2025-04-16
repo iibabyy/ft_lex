@@ -1,8 +1,5 @@
 use std::{
-    collections::VecDeque,
-    io::{stdin, Bytes, Lines},
-    iter::{Enumerate, Peekable},
-    str::Chars,
+    collections::VecDeque, fmt, io::{stdin, Bytes, Lines}, iter::{Enumerate, Peekable}, str::Chars
 };
 
 use super::*;
@@ -110,6 +107,107 @@ impl<R: Read> Reader<R> {
 			Some(Ok(self.peek.as_ref().unwrap()))
 		}
     }
+
+    pub fn read_until(&mut self, delim: &[impl fmt::Display], escape: bool) -> io::Result<Option<String>> {
+        let mut str = String::new();
+
+		let delim = delim.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+
+        loop {
+			let next = self.next()?
+				.and_then(|c| Some(c as char));
+
+            if let Some(c) = next {
+
+				match c {
+					'\\' => {
+						str.push(c);
+						if escape == true {
+							let next = self.next()?
+								.and_then(|c| Some(c as char));
+
+							if let Some(c) = next {
+								str.push(c);
+							}
+						}
+					},
+					_ => {
+						if delim.contains(&c.to_string()) {
+							str.push(c);
+							break;
+						} else {
+							str.push(c);
+						}
+					}
+				}
+
+			} else { // EOF
+				// save the readed string
+				self.push_str(&str);
+
+				return Ok(None);
+			}
+        }
+
+        Ok(Some(str))
+    }
+
+	pub fn read_until_outside_quotes(&mut self, delim: &[impl fmt::Display]) -> io::Result<Option<String>> {
+        let mut str = String::new();
+
+		let delim = delim.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+
+        loop {
+			let next = self.next()?
+				.and_then(|c| Some(c as char));
+
+            if let Some(c) = next {
+
+				match c {
+					'"' => {
+						str.push(c);
+						let quote = self.read_until(&['"'], true)?;
+
+						if let Some(quote) = quote {
+							str.push_str(&quote);
+						} else {
+							// save the readed string
+							self.push_str(&str);
+
+							return Ok(None);
+						}
+					},
+
+					'\\' => {
+						str.push(c);
+						let next = self.next()?
+							.and_then(|c| Some(c as char));
+
+						if let Some(c) = next {
+							str.push(c);
+						}
+					},
+
+					_ => {
+						if delim.contains(&c.to_string()) {
+							str.push(c);
+							break;
+						} else {
+							str.push(c);
+						}
+					}
+				}
+
+			} else { // EOF
+				// save the readed string
+				self.push_str(&str);
+
+				return Ok(None);
+			}
+        }
+
+        Ok(Some(str))
+	}
 }
 
 pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {

@@ -144,14 +144,16 @@ impl Rules {
 			}
 		}
 
-		let peek = *reader.peek()
-			.ok_or(ParsingError::end_of_file().because("missing action"))??
+		let c = reader.next()?
+			.ok_or(ParsingError::end_of_file().because("missing action"))?
 			as char;
 
-		match peek {
+		match c {
 			'|' => todo!(),
 
-			'{' => todo!(),
+			'{' => {
+				
+			},
 
 			_ => todo!()
 		}
