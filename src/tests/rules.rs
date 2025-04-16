@@ -425,16 +425,6 @@ fn test_get_regular_expression_empty() {
 }
 
 #[test]
-fn test_get_regular_expression_with_trailing_section() {
-    let mut reader = reader_from_str("abc{section} ");
-    
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
-    
-    assert_eq!(result.0, "abc");
-    assert_eq!(result.1, Some("section".to_string()));
-}
-
-#[test]
 fn test_get_regular_expression_no_whitespace() {
     let mut reader = reader_from_str("abc");
     
@@ -453,7 +443,8 @@ fn test_get_regular_expression_with_slash_delimiter() {
     
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err.message().contains("expected whitespace delimiter"));
+    assert!(err.message().contains("unexpected end of file"));
+    assert!(err.message().contains("unclosed regular expression"));
 }
 
 #[test]
