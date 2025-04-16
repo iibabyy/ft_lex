@@ -101,6 +101,13 @@ impl From<std::io::Error> for ParsingError {
     }
 }
 
+impl From<&std::io::Error> for ParsingError {
+    fn from(error: &std::io::Error) -> Self {
+        let err = std::io::Error::from(error.kind().clone());
+        ParsingError::io(err)
+    }
+}
+
 impl ParsingError {
     /// Creates a new parsing error from an I/O error.
     pub fn io(err: std::io::Error) -> Self {
@@ -222,6 +229,10 @@ impl ParsingError {
         let cause = "bad start condition";
 
         ParsingError::syntax(cause)
+    }
+
+    pub fn undeclared_start_condition(condition: impl ToString) -> ParsingError {
+        ParsingError::syntax(format!("undeclared start condition {}", condition.to_string()))
     }
 
     /// Creates an error for an invalid number format.

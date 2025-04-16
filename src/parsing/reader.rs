@@ -98,8 +98,8 @@ impl<R: Read> Reader<R> {
         self.rest.push_back(c);
     }
 
-    pub fn peek(&mut self) -> Option<&Result<u8, io::Error>> {
-        self.chars.peek()
+    pub fn peek(&mut self) -> Option<Result<&u8, &io::Error>> {
+        self.chars.peek().and_then(|res| Some(res.as_ref()))
     }
 }
 

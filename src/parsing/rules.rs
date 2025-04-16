@@ -4,6 +4,13 @@ use super::*;
 
 use std::io::Read;
 
+pub enum LineType {
+	Rule (Rule),
+
+	Empty,
+	EndOfSection,
+}
+
 pub enum RuleAction {
 	Echo,
 	Begin(String),
@@ -12,51 +19,98 @@ pub enum RuleAction {
 	Statement(String)
 }
 
-pub enum LineType {
-	Rule {
-		regex: NormalizedDfa,
-		start_conditions: Vec<String>,
-	},
+pub struct Rule {
+	start_conditions: Vec<String>,
 
-	Empty,
-	EndOfSection
+	regex: NormalizedDfa,
+	followed_by: Option<NormalizedDfa>,
+
+	action: RuleAction
 }
 
-pub struct Rules {}
+pub struct Rules {
+	rules: Vec<Rule>
+}
 
 impl Rules {
 	pub fn parse<'de, R: Read>(
-        &'de mut self,
+		&mut self,
         reader: &mut Reader<R>,
-    ) -> ParsingResult<&'de mut Self> {
+		definitions: &Definitions
+    ) -> ParsingResult<Vec<Rule>> {
+		let rules = vec![];
 
 		loop {
-			match Self::line_type(reader)? {
+			match Self::line_type(reader, definitions)? {
 
-				LineType::Rule { regex, start_conditions } => {
+				LineType::Rule( rule ) => {
 					todo!()
 				},
 
 				LineType::Empty => {},
 
-				LineType::EndOfSection => return Ok(self)
+				LineType::EndOfSection => return Ok(rules)
 			}
 		}
 	}
 
-	pub fn line_type<R: Read>(reader: &mut Reader<R>) -> ParsingResult<LineType> {
+	pub fn line_type<R: Read>(
+		reader: &mut Reader<R>,
+		definitions: &Definitions
+	) -> ParsingResult<LineType> {
 
-		let first_char = reader.next()?
-			.ok_or(ParsingError::end_of_file())?
-			as char;
+		let first_char = if let Some(c) = reader.next()? {
+			c as char
+		} else {
+			return Ok(LineType::EndOfSection)
+		};
 
-		if first_char == '<' {
-			
+		let second_char = reader.peek()
+			.ok_or(ParsingError::end_of_file())??;
+
+		if first_char == '%' && second_char == &b'%' {
+			let _ = reader.next();
+
+			loop {
+				match reader.next()? {
+
+					// end of line (e.g. '%%   \n')
+					Some(b'\n') => return Ok(LineType::EndOfSection),
+
+					// whitespace
+					Some(c) if c.is_ascii_whitespace() => { continue; },
+
+					// not a whitespace (e.g. '%%   a')
+					Some(c) => return ParsingError::unexpected_token(c).into(),
+
+					// eof
+					None => return Ok(LineType::EndOfSection)
+				}
+			}
+		}
+
+		if first_char == '\n' {
+			return Ok(LineType::Empty)
+		} else if first_char == '\n' {
+			return Ok(LineType::Empty)
+		} else if first_char.is_ascii_whitespace() {
+			return ParsingError::warning("lines starting by spaces are ignored").into()
+		}
+
+		let start_conditions = if first_char == '<' {
+			Self::extract_start_conditions(reader)?
+		} else {
+			// default state
+			vec!["INITIAL".to_string()]
+		};
+
+		for condition in start_conditions {
+			if definitions.states.contains_key(&condition) == false {
+				return ParsingError::undeclared_start_condition(condition).into()
+			}
 		}
 
 		match first_char {
-
-			'<' => todo!(),
 
 			_ => todo!()
 		}
@@ -88,7 +142,9 @@ impl Rules {
 							.into()
 						}
 
-						start_conditions.push(condition);
+						if !start_conditions.contains(&condition) {
+							start_conditions.push(condition);
+						}
 
 						if c == '>' {
 							return Ok(start_conditions);
@@ -104,6 +160,10 @@ impl Rules {
 								.because(format!("'{c}': invalid first char'"))
 								.because("start conditions have to be iso-C normed")
 							)
+						}
+
+						if !(c.is_ascii_alphanumeric() || c == '_') {
+							
 						}
 
 						condition.push(c);

@@ -175,7 +175,7 @@ impl Definitions {
         Self {
             substitutes: HashMap::new(),
             fragments: Vec::new(),
-            states: HashMap::new(),
+            states: HashMap::from([("INITIAL".to_string(), StateType::Inclusive)]),
             table_sizes: HashMap::new(),
             type_declaration: None,
         }
@@ -341,7 +341,7 @@ impl Definitions {
             "s" | "S" | "x" | "X" => {
                 if split.len() < 2 {
                     return ParsingError::end_of_line()
-                        .because(format!("`%{flag} {{STATE_NAME}}`"))
+                        .because(format!("expected: `%{flag} {{STATE_NAME}}`"))
                         .into();
                 }
 

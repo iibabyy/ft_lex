@@ -36,10 +36,10 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 
 . printf("peu importe...\n");
 
-<INITIAL>a* printf("BABABA\n");
+<ABC>a* printf("BABABA\n");
 <TEST>a* printf("what ?!\n");
 
-<1COMMENT>{
+<COMMENT>{
   {DIGIT}a        { BEGIN(INITIAL); }
 }
 

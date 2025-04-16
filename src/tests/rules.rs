@@ -74,9 +74,9 @@ fn test_unclosed_start_conditions() {
 	};
 
 	check_if_unclosed("STATE");
-	check_if_unclosed("STATE ");
-	check_if_unclosed("STATE\n");
-	check_if_unclosed("STATE\t");
+	check_if_unclosed("STATE >");
+	check_if_unclosed("STATE\n>");
+	check_if_unclosed("STATE\t>");
 }
 
 #[test]
