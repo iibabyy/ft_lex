@@ -4,6 +4,8 @@ use super::*;
 
 use std::io::Read;
 
+pub const DEFAULT_STATE: &str = "INITIAL";
+
 pub enum LineType {
 	Rule (Rule),
 
@@ -59,7 +61,7 @@ impl Rules {
 		definitions: &Definitions
 	) -> ParsingResult<LineType> {
 
-		let first_char = if let Some(c) = reader.next()? {
+		let mut first_char = if let Some(c) = reader.next()? {
 			c as char
 		} else {
 			return Ok(LineType::EndOfSection)
@@ -89,33 +91,193 @@ impl Rules {
 			}
 		}
 
-		if first_char == '\n' {
-			return Ok(LineType::Empty)
-		} else if first_char == '\n' {
-			return Ok(LineType::Empty)
-		} else if first_char.is_ascii_whitespace() {
-			return ParsingError::warning("lines starting by spaces are ignored").into()
-		}
+		let custom_conditions = first_char == '<';
+		let start_conditions = Self::get_conditions(&mut first_char, reader, definitions)?;
 
-		let start_conditions = if first_char == '<' {
-			Self::extract_start_conditions(reader)?
-		} else {
-			// default state
-			vec!["INITIAL".to_string()]
-		};
+		{	// Check if the line is empty
+			if custom_conditions && first_char.is_ascii_whitespace() {
+				return ParsingError::warning("empty line after start condition list").into()
+			}
 
-		for condition in start_conditions {
-			if definitions.states.contains_key(&condition) == false {
-				return ParsingError::undeclared_start_condition(condition).into()
+			if first_char == '\n' {
+				return Ok(LineType::Empty)
+			}
+			
+			if first_char.is_ascii_whitespace() {
+				let line = reader.line()?;
+
+				if line.is_none() {
+					return Ok(LineType::EndOfSection)
+				}
+
+				if line.unwrap().chars().all(|c| c.is_ascii_whitespace()) {
+					return Ok(LineType::Empty)
+				} else {
+					return ParsingError::warning("lines starting by spaces are ignored").into()
+				}
 			}
 		}
 
-		match first_char {
+		let (regex, following_regex) = Self::get_regular_expression(reader)?;
+
+
+
+		todo!()
+	}
+
+	pub fn get_action<R: Read>(
+		reader: &mut Reader<R>
+	) -> ParsingResult<RuleAction> {
+		
+		let mut action = String::new();
+
+		// skip first whitespaces
+		loop {
+			let peek = *reader.peek()
+				.ok_or(ParsingError::end_of_file().because("missing action"))??
+				as char;
+
+			if peek.is_ascii_whitespace() {
+				let _ = reader.next()?;
+			} else {
+				break;
+			}
+		}
+
+		let peek = *reader.peek()
+			.ok_or(ParsingError::end_of_file().because("missing action"))??
+			as char;
+
+		match peek {
+			'|' => todo!(),
+
+			'{' => todo!(),
 
 			_ => todo!()
 		}
 
 		todo!()
+	}
+
+	pub fn get_regular_expression<R: Read>(
+		reader: &mut Reader<R>
+	) -> ParsingResult<(String, Option<String>)> {
+		
+		let regex = Self::read_one_regular_expression(reader)?;
+
+		let peek = *reader.peek()
+			.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))??
+			as char;
+
+		// no following regex (e.g. 'a/b')
+		if peek != '/' {
+			return Ok((regex, None))
+		}
+
+		// skip the '/'
+		let _ = reader.next()?;
+
+		let following_regex = Self::read_one_regular_expression(reader)?;
+
+		let peek = *reader.peek()
+			.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))??
+			as char;
+
+		// duplicate '/'
+		if peek == '/' {
+			return ParsingError::unrecognized_rule().because("duplicate '/'").into()
+		}
+
+		Ok((regex, Some(following_regex)))
+	}
+
+	fn read_one_regular_expression<R: Read>(
+		reader: &mut Reader<R>
+	) -> ParsingResult<String> {
+		let read_until = |delim: char, reader: &mut Reader<R>| -> ParsingResult<String> {
+			let mut str = String::new();
+
+			loop {	// read until the closing quote
+				let c = reader.next()?
+					.ok_or(ParsingError::end_of_file().because(format!("unclosed '{delim}'")))?
+					as char;
+
+				if c == delim {
+					str.push(c);
+					break;
+				}
+
+				str.push(c);
+			}
+
+			Ok(str)
+		};
+
+		let mut regex = String::new();
+		
+		loop {
+			let c = reader.next()?
+				.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))?
+				as char;
+
+			match c {
+				'\"' => {
+					regex.push(c);
+					regex.push_str(&read_until('\"', reader)?);
+				},
+
+				'[' => {
+					regex.push(c);
+					regex.push_str(&read_until(']', reader)?);
+				},
+
+				'\\' => {
+					regex.push(c);
+
+					let c = reader.next()?
+						.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))?
+						as char;
+
+					regex.push(c);
+				},
+
+				_ => {
+
+					// delimiter
+					if c.is_ascii_whitespace() || c == '/' {
+						reader.push_char(c);
+						return Ok(regex);
+					}
+
+					regex.push(c);
+				}
+			}
+		}
+	}
+
+	pub fn get_conditions<R: Read>(
+		first_char: &mut char,
+		reader: &mut Reader<R>,
+		definitions: &Definitions
+	) -> ParsingResult<Vec<String>> {
+		let conditions = if *first_char == '<' {
+			let conditions = Self::extract_start_conditions(reader)?;
+
+			*first_char = reader.next()?
+				.ok_or(ParsingError::end_of_file().because("unclosed start condition list"))? as char;
+
+			conditions
+		} else {
+			vec![DEFAULT_STATE.to_string()]
+		};
+
+		for condition in &conditions {
+			if definitions.states.contains_key(condition) == false {
+				return ParsingError::undeclared_start_condition(condition).into()
+			}
+		}
+
+		Ok(conditions)
 	}
 
 	pub fn extract_start_conditions<R: Read>(reader: &mut Reader<R>) -> ParsingResult<Vec<String>> {
@@ -179,4 +341,5 @@ impl Rules {
 
 		Ok(start_conditions)
 	}
+
 }

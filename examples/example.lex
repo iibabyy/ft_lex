@@ -36,7 +36,7 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 
 . printf("peu importe...\n");
 
-<ABC>a* printf("BABABA\n");
+a/b printf("BABABA\n");
 <TEST>a* printf("what ?!\n");
 
 <COMMENT>{
