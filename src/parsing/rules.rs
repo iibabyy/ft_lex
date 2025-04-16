@@ -131,10 +131,6 @@ impl Rules {
 					as char;
 
 				match c {
-					c if c.is_ascii_whitespace() => return ParsingError::end_of_line()
-						.because("unclosed start condition list")
-						.into(),
-
 					'>' | ',' => {
 						if condition.is_empty() {
 							return ParsingError::bad_start_condition()
@@ -157,13 +153,16 @@ impl Rules {
 						// valid first char (alphabetic or '_')
 						if condition.is_empty() && !(c.is_ascii_alphabetic() || c == '_') {
 							return Err(ParsingError::bad_start_condition()
-								.because(format!("'{c}': invalid first char'"))
+								.because(format!("'{c}': invalid char in start condition"))
 								.because("start conditions have to be iso-C normed")
 							)
 						}
 
 						if !(c.is_ascii_alphanumeric() || c == '_') {
-							
+							return Err(ParsingError::bad_start_condition()
+								.because(format!("'{c}': invalid char in start condition"))
+								.because("start conditions have to be iso-C normed")
+							)
 						}
 
 						condition.push(c);

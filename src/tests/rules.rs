@@ -74,9 +74,7 @@ fn test_unclosed_start_conditions() {
 	};
 
 	check_if_unclosed("STATE");
-	check_if_unclosed("STATE >");
-	check_if_unclosed("STATE\n>");
-	check_if_unclosed("STATE\t>");
+	check_if_unclosed("STATE1,STATE2");
 }
 
 #[test]
@@ -103,6 +101,103 @@ fn test_non_iso_C_start_conditions() {
 
 	let err = result.unwrap_err();
 
-	assert!(err.message().contains("'1': invalid first char"));
+	assert!(err.message().contains("'1': invalid char in start condition"));
 	assert!(err.message().contains("start conditions have to be iso-C normed"));
+}
+
+#[test]
+fn test_whitespace_in_start_conditions() {
+    let mut reader = reader_from_str("STATE1, STATE2 >");
+
+    let result = Rules::extract_start_conditions(&mut reader);
+
+	assert!(result.is_err());
+
+	let err = result.unwrap_err();
+
+	assert!(err.message().contains("' ': invalid char in start condition"));
+	assert!(err.message().contains("start conditions have to be iso-C normed"));
+}
+
+#[test]
+fn test_duplicate_start_conditions() {
+    let mut reader = reader_from_str("STATE,STATE>");
+
+    let result = Rules::extract_start_conditions(&mut reader).unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(&result[0], "STATE");
+}
+
+#[test]
+fn test_special_characters_in_start_conditions() {
+    let mut reader = reader_from_str("STATE_1>");
+
+    let result = Rules::extract_start_conditions(&mut reader).unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(&result[0], "STATE_1");
+
+	let mut reader = reader_from_str("STATE-2>");
+
+	let result = Rules::extract_start_conditions(&mut reader).unwrap_err();
+
+	assert!(result.message().contains("'-': invalid char in start condition"));
+	assert!(result.message().contains("start conditions have to be iso-C normed"));
+}
+
+#[test]
+fn test_max_length_start_condition() {
+    let long_name = "A".repeat(100);
+    let mut reader = reader_from_str(&format!("{}>", long_name));
+
+    let result = Rules::extract_start_conditions(&mut reader).unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0], long_name);
+}
+
+#[test]
+fn test_mixed_case_start_conditions() {
+    let mut reader = reader_from_str("State1,STATE2,state3>");
+
+    let result = Rules::extract_start_conditions(&mut reader).unwrap();
+
+    assert_eq!(result.len(), 3);
+    assert_eq!(&result[0], "State1");
+    assert_eq!(&result[1], "STATE2");
+    assert_eq!(&result[2], "state3");
+}
+
+#[test]
+fn test_trailing_comma() {
+    let mut reader = reader_from_str("STATE1,STATE2,>");
+
+    let result = Rules::extract_start_conditions(&mut reader);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("empty condition"));
+}
+
+#[test]
+fn test_leading_comma() {
+    let mut reader = reader_from_str(",STATE1,STATE2>");
+
+    let result = Rules::extract_start_conditions(&mut reader);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("empty condition"));
+}
+
+#[test]
+fn test_multiple_commas() {
+    let mut reader = reader_from_str("STATE1,,STATE2>");
+
+    let result = Rules::extract_start_conditions(&mut reader);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("empty condition"));
 }

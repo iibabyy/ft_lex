@@ -33,10 +33,12 @@ mod tests {
     fn test_empty_definitions() {
         let defs = Definitions::new();
         assert!(defs.substitutes.is_empty());
-        assert!(defs.fragments.is_empty());
-        assert!(defs.states.is_empty());
         assert!(defs.table_sizes.is_empty());
         assert!(defs.type_declaration.is_none());
+        assert!(defs.fragments.is_empty());
+
+        assert_eq!(defs.states.len(), 1);
+		assert!(defs.states.get("INITIAL").is_some());
     }
 
     #[test]
@@ -49,7 +51,10 @@ mod tests {
         // Successfully parsed the empty section
         assert!(defs.substitutes.is_empty());
         assert!(defs.fragments.is_empty());
-        assert!(defs.states.is_empty());
+        assert_eq!(defs.states.len(), 1);
+
+		assert!(defs.states.get("INITIAL").is_some());
+
         Ok(())
     }
 
