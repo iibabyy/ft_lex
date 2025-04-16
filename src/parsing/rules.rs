@@ -191,7 +191,7 @@ impl Rules {
 		Ok((regex, Some(following_regex)))
 	}
 
-	fn read_one_regular_expression<R: Read>(
+	pub fn read_one_regular_expression<R: Read>(
 		reader: &mut Reader<R>
 	) -> ParsingResult<String> {
 		let read_until = |delim: char, reader: &mut Reader<R>| -> ParsingResult<String> {
@@ -202,12 +202,20 @@ impl Rules {
 					.ok_or(ParsingError::end_of_file().because(format!("unclosed '{delim}'")))?
 					as char;
 
-				if c == delim {
+				if c == '\\' {
+					str.push(c);
+
+					let next = reader.next()?
+						.ok_or(ParsingError::end_of_file().because(format!("unclosed '{delim}'")))?
+						as char;
+
+					str.push(next);
+				} else if c == delim {
 					str.push(c);
 					break;
+				} else {
+					str.push(c);
 				}
-
-				str.push(c);
 			}
 
 			Ok(str)
