@@ -6,6 +6,16 @@ use std::io::Read;
 
 pub const DEFAULT_STATE: &str = "INITIAL";
 
+static mut RULE_ID: usize = 1;
+
+pub fn rule_id() -> usize {
+	unsafe { RULE_ID }
+}
+
+pub fn increment_rule_id() {
+	unsafe { RULE_ID += 1 }
+}
+
 pub enum LineType {
 	Rule (Rule),
 
@@ -21,8 +31,8 @@ pub enum RuleAction {
 pub struct Rule {
 	start_conditions: Vec<String>,
 
-	regex: NormalizedDfa,
-	followed_by: Option<NormalizedDfa>,
+	regex_nfa: StatePtr,
+	following_regex_nfa: Option<StatePtr>,
 
 	action: RuleAction
 }
@@ -43,7 +53,7 @@ impl Rules {
 			match Self::line_type(reader, definitions)? {
 
 				LineType::Rule( rule ) => {
-					todo!()
+					self.rules.push(rule);
 				},
 
 				LineType::Empty => {},
@@ -117,9 +127,24 @@ impl Rules {
 
 		let (regex, following_regex) = Self::get_regular_expression(reader)?;
 
+		let action = Self::get_action(reader)?;
 
+		let regex_nfa = Regex::new(regex, rule_id())?;
 
-		todo!()
+		let following_regex_nfa = if let Some(expr) = following_regex {
+			Some(Regex::new(expr, rule_id())?)
+		} else {
+			None
+		};
+
+		Ok(
+			LineType::Rule(Rule {
+				start_conditions,
+				regex_nfa,
+				following_regex_nfa,
+				action
+			})
+		)
 	}
 
 	pub fn get_action<R: Read>(
