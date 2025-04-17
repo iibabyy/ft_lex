@@ -485,7 +485,7 @@ fn test_read_entire_block_simple() {
     
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, " simple block ");
+    assert_eq!(result, "{ simple block }");
 }
 
 #[test]
@@ -494,7 +494,7 @@ fn test_read_entire_block_empty() {
     
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, "");
+    assert_eq!(result, "{}");
 }
 
 #[test]
@@ -503,7 +503,7 @@ fn test_read_entire_block_with_nested_braces() {
     
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, " outer { inner } block ");
+    assert_eq!(result, "{ outer { inner } block }");
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn test_read_entire_block_with_escaped_braces() {
 
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, " block with \\{ escaped \\} braces ");
+    assert_eq!(result, "{ block with \\{ escaped \\} braces }");
 }
 
 #[test]
@@ -521,7 +521,7 @@ fn test_read_entire_block_multiline() {
     
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, "\n    multiline\n    block\n");
+    assert_eq!(result, "{\n    multiline\n    block\n}");
 }
 
 #[test]
@@ -530,7 +530,7 @@ fn test_read_entire_block_with_special_chars() {
     
     let result = Rules::read_entire_block(&mut reader).unwrap();
     
-    assert_eq!(result, " block with special chars: !@#$%^&*()_+-=[] ");
+    assert_eq!(result, "{ block with special chars: !@#$%^&*()_+-=[] }");
 }
 
 #[test]

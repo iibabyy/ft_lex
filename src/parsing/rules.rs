@@ -14,9 +14,6 @@ pub enum LineType {
 }
 
 pub enum RuleAction {
-	Echo,
-	Begin(String),
-	Reject,
 	Or,
 	Statement(String)
 }
@@ -148,22 +145,24 @@ impl Rules {
 			.ok_or(ParsingError::end_of_file().because("missing action"))??
 			as char;
 
-		match c {
-			'|' => todo!(),
+		let action = match c {
+			'|' => RuleAction::Or,
 
 			'{' => {
-
+				RuleAction::Statement(Self::read_entire_block(reader)?)
 			},
 
 			_ => todo!()
-		}
+		};
 
 		todo!()
 	}
 
 	pub fn read_entire_block<R: Read>(
 		reader: &mut Reader<R>
-	) -> ParsingResult<String> {
+	) -> ParsingResult<String> {		
+		let mut block = String::new();
+
 		{	// check if the first char is a '{'
 			let peek = *reader.peek()
 				.ok_or(ParsingError::end_of_file().because("expected '{'"))??
@@ -174,10 +173,13 @@ impl Rules {
 			}
 		}
 
-		// skip the '{'
-		let _ = reader.next()?;
+		{	// read and add the '{'
+			let c = reader.next()?
+				.ok_or(ParsingError::end_of_file().because("expected '{'"))?
+				as char;
 
-		let mut block = String::new();
+			block.push(c);
+		}
 
 		let mut depth = 1;
 
@@ -214,9 +216,7 @@ impl Rules {
 
 				'}' => {
 					depth -= 1;
-					if depth > 0 {
-						block.push(c);
-					}
+					block.push(c);
 				},
 
 				_ => {
