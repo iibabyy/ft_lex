@@ -144,21 +144,88 @@ impl Rules {
 			}
 		}
 
-		let c = reader.next()?
-			.ok_or(ParsingError::end_of_file().because("missing action"))?
+		let c = *reader.peek()
+			.ok_or(ParsingError::end_of_file().because("missing action"))??
 			as char;
 
 		match c {
 			'|' => todo!(),
 
 			'{' => {
-				
+
 			},
 
 			_ => todo!()
 		}
 
 		todo!()
+	}
+
+	pub fn read_entire_block<R: Read>(
+		reader: &mut Reader<R>
+	) -> ParsingResult<String> {
+		{	// check if the first char is a '{'
+			let peek = *reader.peek()
+				.ok_or(ParsingError::end_of_file().because("expected '{'"))??
+				as char;
+
+			if peek != '{' {
+				return ParsingError::end_of_file().because("expected '{'").into()
+			}
+		}
+
+		// skip the '{'
+		let _ = reader.next()?;
+
+		let mut block = String::new();
+
+		let mut depth = 1;
+
+		while depth > 0 {
+			let c = reader.next()?
+				.ok_or(ParsingError::end_of_file().because("unclosed block"))?
+				as char;
+			
+			match c {
+
+				'"' => {
+					block.push(c);
+					if let Some(content) = reader.read_until(&['"'], true)? {
+						block.push_str(&content);
+					} else {
+						return ParsingError::end_of_file().because("unclosed quote in block").into()
+					}
+				},
+
+				'\\' => {
+					block.push(c);
+
+					let c = reader.next()?
+						.ok_or(ParsingError::end_of_file().because("unclosed block"))?
+						as char;
+
+					block.push(c);
+				},
+
+				'{' => {
+					depth += 1;
+					block.push(c);
+				},
+
+				'}' => {
+					depth -= 1;
+					if depth > 0 {
+						block.push(c);
+					}
+				},
+
+				_ => {
+					block.push(c);
+				}
+			}
+		}
+
+		Ok(block)
 	}
 
 	pub fn get_regular_expression<R: Read>(

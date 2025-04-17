@@ -478,3 +478,101 @@ fn test_get_regular_expression_with_duplicate_slash() {
     let err = result.unwrap_err();
     assert!(err.message().contains("duplicate '/'"));
 }
+
+#[test]
+fn test_read_entire_block_simple() {
+    let mut reader = reader_from_str("{ simple block }");
+    
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, " simple block ");
+}
+
+#[test]
+fn test_read_entire_block_empty() {
+    let mut reader = reader_from_str("{}");
+    
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, "");
+}
+
+#[test]
+fn test_read_entire_block_with_nested_braces() {
+    let mut reader = reader_from_str("{ outer { inner } block }");
+    
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, " outer { inner } block ");
+}
+
+#[test]
+fn test_read_entire_block_with_escaped_braces() {
+    let mut reader = reader_from_str("{ block with \\{ escaped \\} braces }");
+
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, " block with \\{ escaped \\} braces ");
+}
+
+#[test]
+fn test_read_entire_block_multiline() {
+    let mut reader = reader_from_str("{\n    multiline\n    block\n}");
+    
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, "\n    multiline\n    block\n");
+}
+
+#[test]
+fn test_read_entire_block_with_special_chars() {
+    let mut reader = reader_from_str("{ block with special chars: !@#$%^&*()_+-=[] }");
+    
+    let result = Rules::read_entire_block(&mut reader).unwrap();
+    
+    assert_eq!(result, " block with special chars: !@#$%^&*()_+-=[] ");
+}
+
+#[test]
+fn test_read_entire_block_unclosed() {
+    let mut reader = reader_from_str("{ unclosed block");
+    
+    let result = Rules::read_entire_block(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("unclosed block"));
+}
+
+#[test]
+fn test_read_entire_block_no_opening_brace() {
+    let mut reader = reader_from_str("no opening brace }");
+    
+    let result = Rules::read_entire_block(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("expected '{'"));
+}
+
+#[test]
+fn test_read_entire_block_nested_unclosed() {
+    let mut reader = reader_from_str("{ outer { inner block }");
+    
+    let result = Rules::read_entire_block(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("unclosed block"));
+}
+
+#[test]
+fn test_read_entire_block_empty_input() {
+    let mut reader = reader_from_str("");
+    
+    let result = Rules::read_entire_block(&mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("unexpected end of file"));
+}

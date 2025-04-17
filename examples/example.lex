@@ -37,7 +37,7 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 . printf("peu importe...\n");
 
 a/b {
-	printf("BABABA\n");
+	{printf("BABABA\n");}
 }
 
 
