@@ -212,6 +212,41 @@ impl<R: Read> Reader<R> {
     pub fn push_front(&mut self, c: char) {
         self.rest.push_front(c);
     }
+
+	pub fn read(&mut self, n: usize) -> io::Result<Option<String>> {
+		if self.peek().is_none() {
+			return Ok(None);
+		}
+		
+		let mut str = String::new();
+
+		for _ in 0..n {
+			let c = self.next()?
+				.and_then(|c| Some(c as char));
+
+			if let Some(c) = c {
+				str.push(c);
+			} else {
+				break;
+			}
+		}
+
+		Ok(Some(str))
+	}
+
+	pub fn read_all(&mut self) -> io::Result<Option<String>> {
+		let mut str = String::new();
+
+		if self.peek().is_none() {
+			return Ok(None);
+		}
+
+		while let Some(c) = self.next()? {
+			str.push(c as char);
+		}
+
+		Ok(Some(str))
+	}
 }
 
 pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {

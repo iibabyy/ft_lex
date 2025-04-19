@@ -380,7 +380,7 @@ impl Definitions {
                 let declaration = TableSizeDeclaration::try_from(flag).unwrap();
 
                 if value < declaration.minimum_value() {
-                    return ParsingError::warning(format!("minimum value: {value}")).into()
+                    return ParsingError::warning(format!("minimum value: {}", declaration.minimum_value())).into()
                 }
 
                 return Ok(DefinitionType::TableSize(

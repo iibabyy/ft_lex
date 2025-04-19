@@ -43,27 +43,28 @@ pub struct Rule {
 pub struct Rules {}
 
 impl Rules {
-	pub fn parse_rules<'de, R: Read>(
+	pub fn parse_rules<'rules, R: Read>(
+		rules: &'rules mut Vec<Rule>,
         reader: &mut Reader<R>,
 		definitions: &Definitions
-    ) -> ParsingResult<Vec<Rule>> {
-		let mut rules = vec![];
-
+    ) -> ParsingResult<&'rules mut Vec<Rule>> {
 		loop {
+			let line_type = Self::line_type(reader, definitions);
+
+			if let Err(err) = line_type {
+				return Err(err);
+			}
+
 			match Self::line_type(reader, definitions)? {
 
 				LineType::Rule( rule ) => {
-					dbg!(&rule);
 					rules.push(rule);
 				},
 
-				LineType::Empty => {
-					dbg!("empty line");
-				},
+				LineType::Empty => {},
 
 				LineType::EndOfSection => {
-					dbg!("end of section");
-					return Ok(rules)
+					return Ok(rules);
 				}
 			}
 		}
@@ -368,7 +369,6 @@ impl Rules {
 					// delimiter
 					if c.is_ascii_whitespace() || c == '/' {
 						reader.push_char(c);
-						dbg!(&regex);
 						return Ok(regex);
 					}
 

@@ -26,6 +26,12 @@ pub struct Parsing {
     /// Collection of lexer definitions (substitutions, fragments, etc.)
     pub definitions: Definitions,
 
+	/// Collection of lexer rules
+	pub rules: Vec<Rule>,
+
+	/// Collection of user-defined subroutines
+	pub user_subroutines: Option<String>,
+
     pub errors: Vec<ParsingError>,
 
     /// The current section being parsed
@@ -60,6 +66,8 @@ impl Parsing {
     pub fn new() -> io::Result<Self> {
         Ok(Self {
             definitions: Definitions::new(),
+            rules: Vec::new(),
+            user_subroutines: None,
             errors: Vec::new(),
             section: Section::Definitions,
         })
@@ -112,14 +120,13 @@ impl Parsing {
     /// This function handles the parsing of each section (definitions, rules, subroutines)
     /// and advances to the next section when appropriate.
     fn parse_sections<'parsing, R: Read>(&'parsing mut self, reader: &mut Reader<R>) -> Result<(), &'parsing Vec<ParsingError>> {
-        'big_loop: loop {
+
+		'big_loop: loop {
             match self.section {
                 Section::Definitions => {
                     // Parse the definitions section (substitutions, fragments, etc.)
                     while let Err(err) = self.definitions.parse(reader) {
                         let err = err.file(reader.filename()).line(reader.index());
-
-                        eprintln!("{}", err.to_string());
 
                         self.errors.push(err);
 
@@ -137,14 +144,33 @@ impl Parsing {
                     self.next_section();
                 }
                 Section::Rules => {
-                    // TODO: Implement rules section parsing
-                    eprintln!("TODO: Rules Section");
-                    break;
+                    // Parse the rules section
+                    while let Err(err) = Rules::parse_rules(&mut self.rules, reader, &self.definitions) {
+                        let err = err.file(reader.filename()).line(reader.index());
+
+                        self.errors.push(err);
+
+						match self.errors.last().unwrap().type_ {
+							ParsingErrorType::Io(_) => break 'big_loop,
+
+							ParsingErrorType::UnexpectedEof(_) => break 'big_loop,
+
+							// To parse all the file even if there is a syntax error
+							_ => {}
+						}
+                    }
+
+					// Move to the subroutines section after rules are parsed
+					self.next_section();
                 }
                 Section::Subroutines => {
-                    // TODO: Implement subroutines section parsing
-                    eprintln!("TODO: Subroutines Section");
-                    break;
+                    let subroutines = reader.read_all();
+
+					if subroutines.is_err() {
+						self.errors.push(ParsingError::from(subroutines.unwrap_err()).file(reader.filename()).line(reader.index()));
+					} else {
+						self.user_subroutines = subroutines.unwrap();
+					}
                 }
             }
         }

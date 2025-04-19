@@ -890,9 +890,6 @@ fn test_character_classes() {
 	let digit_class = into_postfix("\\d");
 	let digit_range = into_postfix("[0-9]");
 	
-	dbg!(&digit_class);
-	dbg!(&digit_range);
-
 	assert!(compare_nfas(
 		digit_class,
 		digit_range
@@ -1613,8 +1610,6 @@ fn test_deep_clone_diamond_structure() {
 	
 	// Both paths should lead to the same match state
 	// Debug both output paths to verify they point to the same match state
-	dbg!(&out1_match);
-	dbg!(&out2_match);
 	assert_eq!(Rc::ptr_eq(&*out1_match.borrow(), &*out2_match.borrow()), true);
 }
 

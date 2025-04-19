@@ -264,8 +264,6 @@ fn test_character_class_predefined_word_char() {
 fn test_character_class_predefined_non_word_char() {
     let class = CharacterClass::non_word_char();
 
-	dbg!(&class);
-
     assert!(!class.contains(&'a'));
     assert!(class.negated);
 	assert_eq!(class.len(), 128 - 63);
@@ -556,7 +554,6 @@ fn test_tokens_with_parentheses() {
 fn test_tokens_with_quantifiers() {
     let result = Regex::tokens("a*b+c?").unwrap();
 
-	dbg!(&result);
     assert_eq!(result.len(), 6);
     assert_eq!(result[0], RegexType::Char('a'));
     assert!(matches!(result[1], RegexType::Quant(Quantifier::AtLeast(0))));

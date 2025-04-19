@@ -614,7 +614,6 @@ fn test_simulate_with_complex_character_classes() {
 
 fn test_simulate(pattern: &str, valid_matches: Vec<&str>, invalid_matches: Vec<&str>) {
     // Create a DFA with complex anchored pattern
-	dbg!(into_postfix(pattern));
     let nfa = post2nfa(into_postfix(pattern), 1).unwrap();
     let mut dfa = Dfa::new(vec![nfa]);
     let normalized_dfa = NormalizedDfa::from(&mut dfa);

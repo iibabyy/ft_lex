@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    dbg!(parser.definitions);
+    dbg!(parser);
 
     Ok(())
 }

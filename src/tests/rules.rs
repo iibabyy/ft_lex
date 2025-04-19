@@ -734,7 +734,8 @@ fn test_parse_rules_empty() {
     let mut reader = reader_from_str("%%");
     let definitions = Definitions::default();
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 0);
 }
@@ -746,7 +747,8 @@ fn test_parse_rules_single_rule() {
     
     let mut reader = reader_from_str("[a-z]+ {action1;}\n%%");
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 1);
 }
@@ -760,7 +762,8 @@ fn test_parse_rules_multiple_rules() {
         "[a-z]+ {action1;}\n[0-9]+ {action2;}\n\"string\" {action3;}\n%%"
     );
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 3);
 }
@@ -774,7 +777,8 @@ fn test_parse_rules_with_empty_lines() {
         "[a-z]+ {action1;}\n\n[0-9]+ {action2;}\n\n\n\"string\" {action3;}\n%%"
     );
 
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 3);
 }
@@ -790,7 +794,8 @@ fn test_parse_rules_with_different_start_conditions() {
         "[a-z]+ {action1;}\n<STATE1>[0-9]+ {action2;}\n<STATE2>\"string\" {action3;}\n%%"
     );
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 3);
     
@@ -818,7 +823,8 @@ fn test_parse_rules_with_multiple_start_conditions() {
         "<STATE1,STATE2>[0-9]+ {action;}\n%%"
     );
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].start_conditions.len(), 2);
@@ -835,7 +841,8 @@ fn test_parse_rules_with_or_actions() {
         "[a-z]+ {action1;}\n[0-9]+ |\n\"string\" {action3;}\n%%"
     );
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+    let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 3);
     
@@ -856,7 +863,8 @@ fn test_parse_rules_with_following_regex() {
         "first/second {action;}\n%%"
     );
     
-    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+	let mut result = vec![];
+	let _ = Rules::parse_rules(&mut result, &mut reader, &definitions).unwrap();
     
     assert_eq!(result.len(), 1);
     assert!(result[0].following_regex_nfa.is_some());
@@ -874,7 +882,13 @@ fn test_parse_rules_with_error() {
         "[a-z]+ {action;}\n%%"
     );
 
-    let result = Rules::parse_rules(&mut reader, &definitions);
-    
+	let mut tmp = vec![];
+	let result = Rules::parse_rules(&mut tmp, &mut reader, &definitions);
+
     assert!(result.is_err());
+	let err = result.unwrap_err();
+
+	assert_eq!(err.message(), "no states defined");
+
+	assert_eq!(tmp.len(), 0);
 }

@@ -142,8 +142,6 @@ pub fn simulate(str: &str, dfa: &NormalizedDfa) -> Option<Match> {
 		None => return None
 	};
 
-	dbg!(&match_state);
-
 	Some(Match {
 		state: Rc::clone(match_state),
 		length: match_length

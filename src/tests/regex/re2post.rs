@@ -862,8 +862,6 @@ fn test_complex_alternation_with_groups() {
     let tokens = create_tokens("(ab|cd)*(ef|gh)+|(ij|kl)?");
     let result = re2post(tokens).unwrap();
 
-	dbg!(&result);
-    
     // Verify the structure of the postfix expression
     let char_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Char(_))).count();
     let or_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Or)).count();
@@ -923,8 +921,6 @@ fn test_pathological_regex_conversion() {
     assert!(has_start_anchor);
     assert!(has_end_anchor);
     
-
-	dbg!(&result);
     // Count groups, alternations, and quantifiers
     let or_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Or)).count();
     let quant_count = result.iter().filter(|t| matches!(t.into_inner(), RegexType::Quant(_))).count();
