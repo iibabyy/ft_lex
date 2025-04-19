@@ -1078,19 +1078,12 @@ impl fmt::Display for State {
         match self {
             State::Basic(basic) => write!(
                 f,
-                "{}",
-                basic
-                    .out
-                    .borrow()
-                    .borrow()
-                    .is_none()
-                    .then_some("...")
-                    .unwrap_or("None")
+                "Basic({basic})",
             ),
 
             State::NoMatch => write!(f, "NoMatch()"),
 
-            State::Match { id } => write!(f, "Match[{id}]"),
+            State::Match { id } => write!(f, "Match({id})"),
 
             State::None => write!(f, "None"),
 
@@ -1119,9 +1112,6 @@ impl fmt::Display for State {
                 out
                     .borrow()
                     .borrow()
-                    .is_none()
-                    .then_some("...")
-                    .unwrap_or("None")
             ),
             
             State::EndOfLine { out } => write!(
@@ -1130,9 +1120,6 @@ impl fmt::Display for State {
                 out
                     .borrow()
                     .borrow()
-                    .is_none()
-                    .then_some("...")
-                    .unwrap_or("None")
             ),
         }
     }
@@ -1140,7 +1127,16 @@ impl fmt::Display for State {
 
 impl fmt::Display for BasicState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ c: {}, out: ... }}", self.c)
+        write!(f,
+			"{{ c: {c}, out: {out} }}",
+			c = self.c,
+			out = self.out
+				.borrow()
+				.borrow()
+				.is_none()
+				.then_some("None")
+				.unwrap_or("...")
+		)
     }
 }
 

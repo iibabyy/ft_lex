@@ -4,10 +4,11 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
+
 		{
 			"type": "lldb",
 			"request": "launch",
-			"name": "Debug executable 'ft_lex'",
+			"name": "Debug executable 'ft_lex' with example.lex",
 			"cargo": {
 				"args": [
 					"build",
@@ -21,7 +22,25 @@
 			},
 			"args": [
 				"examples/example.lex",
-				"-"
+			],
+			"cwd": "${workspaceFolder}"
+		},{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'ft_lex' with simple.lex",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=ft_lex",
+					"--package=ft_lex"
+				],
+				"filter": {
+					"name": "ft_lex",
+					"kind": "bin"
+				}
+			},
+			"args": [
+				"examples/simple.lex",
 			],
 			"cwd": "${workspaceFolder}"
 		},

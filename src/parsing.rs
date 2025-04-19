@@ -171,6 +171,8 @@ impl Parsing {
 					} else {
 						self.user_subroutines = subroutines.unwrap();
 					}
+
+					break 'big_loop;
                 }
             }
         }

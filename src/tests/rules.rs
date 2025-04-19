@@ -679,7 +679,7 @@ fn test_line_type_with_undeclared_condition() {
     
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err.message().contains("undeclared start condition"));
+    assert!(err.message().contains("undeclared start condition: `UNDECLARED`"));
 }
 
 #[test]
@@ -888,7 +888,7 @@ fn test_parse_rules_with_error() {
     assert!(result.is_err());
 	let err = result.unwrap_err();
 
-	assert_eq!(err.message(), "no states defined");
+	assert_eq!(err.message(), "undeclared start condition: `INITIAL`");
 
 	assert_eq!(tmp.len(), 0);
 }

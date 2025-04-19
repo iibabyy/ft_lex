@@ -42,10 +42,15 @@ pub struct CharacterClass {
 
 impl fmt::Display for CharacterClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let chars = self.chars
+			.iter()
+			.map(|c| if c == &'\n' { "\\n".to_string() } else { c.to_string() })
+			.collect::<String>();
+
         if self.negated {
-            write!(f, "[^{}]", self.chars.iter().collect::<String>())
+            write!(f, "[^{}]", chars)
         } else {
-            write!(f, "[{}]", self.chars.iter().collect::<String>())
+            write!(f, "[{}]", chars)
         }
     }
 }
@@ -124,7 +129,7 @@ impl fmt::Display for RegexType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RegexType::Char(c) => write!(f, "{}", c),
-            RegexType::CharacterClass(cc) => write!(f, "[{}]", cc),
+            RegexType::CharacterClass(cc) => write!(f, "{}", cc),
             RegexType::LineStart => write!(f, "^"),
             RegexType::LineEnd => write!(f, "$"),
             RegexType::OpenParenthesis => write!(f, "("),

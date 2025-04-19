@@ -236,7 +236,7 @@ impl ParsingError {
     }
 
     pub fn undeclared_start_condition(condition: impl ToString) -> ParsingError {
-        ParsingError::syntax(format!("undeclared start condition {}", condition.to_string()))
+        ParsingError::syntax(format!("undeclared start condition: `{}`", condition.to_string()))
     }
 
     /// Creates an error for an invalid number format.

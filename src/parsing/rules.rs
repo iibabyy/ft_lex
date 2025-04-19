@@ -55,7 +55,7 @@ impl Rules {
 				return Err(err);
 			}
 
-			match Self::line_type(reader, definitions)? {
+			match line_type.unwrap() {
 
 				LineType::Rule( rule ) => {
 					rules.push(rule);
