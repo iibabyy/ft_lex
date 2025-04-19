@@ -162,8 +162,6 @@ impl Rules {
 	pub fn get_action<R: Read>(
 		reader: &mut Reader<R>
 	) -> ParsingResult<RuleAction> {
-		
-		let mut action = String::new();
 
 		// skip first whitespaces
 		loop {
