@@ -16,6 +16,7 @@ pub fn increment_rule_id() {
 	unsafe { RULE_ID += 1 }
 }
 
+#[derive(Debug)]
 pub enum LineType {
 	Rule (Rule),
 
@@ -23,42 +24,47 @@ pub enum LineType {
 	EndOfSection,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum RuleAction {
 	Or,
 	Statement(String)
 }
 
+#[derive(Debug)]
 pub struct Rule {
-	start_conditions: Vec<String>,
+	pub start_conditions: Vec<String>,
 
-	regex_nfa: StatePtr,
-	following_regex_nfa: Option<StatePtr>,
+	pub regex_nfa: StatePtr,
+	pub following_regex_nfa: Option<StatePtr>,
 
-	action: RuleAction
+	pub action: RuleAction
 }
 
-pub struct Rules {
-	rules: Vec<Rule>
-}
+pub struct Rules {}
 
 impl Rules {
-	pub fn parse<'de, R: Read>(
-		&mut self,
+	pub fn parse_rules<'de, R: Read>(
         reader: &mut Reader<R>,
 		definitions: &Definitions
     ) -> ParsingResult<Vec<Rule>> {
-		let rules = vec![];
+		let mut rules = vec![];
 
 		loop {
 			match Self::line_type(reader, definitions)? {
 
 				LineType::Rule( rule ) => {
-					self.rules.push(rule);
+					dbg!(&rule);
+					rules.push(rule);
 				},
 
-				LineType::Empty => {},
+				LineType::Empty => {
+					dbg!("empty line");
+				},
 
-				LineType::EndOfSection => return Ok(rules)
+				LineType::EndOfSection => {
+					dbg!("end of section");
+					return Ok(rules)
+				}
 			}
 		}
 	}
@@ -73,6 +79,10 @@ impl Rules {
 		} else {
 			return Ok(LineType::EndOfSection)
 		};
+
+		if first_char == '\n' {
+			return Ok(LineType::Empty)
+		}
 
 		let second_char = reader.peek()
 			.ok_or(ParsingError::end_of_file())??;
@@ -125,6 +135,8 @@ impl Rules {
 			}
 		}
 
+		reader.push_front(first_char);
+
 		let (regex, following_regex) = Self::get_regular_expression(reader)?;
 
 		let action = Self::get_action(reader)?;
@@ -171,16 +183,26 @@ impl Rules {
 			as char;
 
 		let action = match c {
-			'|' => RuleAction::Or,
 
 			'{' => {
 				RuleAction::Statement(Self::read_entire_block(reader)?)
 			},
 
-			_ => todo!()
+			_ => {
+				let line = reader.line()?
+					.ok_or(ParsingError::end_of_file().because("missing action"))?;
+
+				let trimmed = line.trim_ascii();
+
+				if trimmed == "|" {
+					RuleAction::Or
+				} else {
+					RuleAction::Statement(line)
+				}
+			}
 		};
 
-		todo!()
+		Ok(action)
 	}
 
 	pub fn read_entire_block<R: Read>(
@@ -348,6 +370,7 @@ impl Rules {
 					// delimiter
 					if c.is_ascii_whitespace() || c == '/' {
 						reader.push_char(c);
+						dbg!(&regex);
 						return Ok(regex);
 					}
 

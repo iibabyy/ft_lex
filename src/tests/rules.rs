@@ -3,7 +3,8 @@ use crate::parsing::definitions::{
 };
 use crate::parsing::error::ParsingResult;
 use crate::parsing::reader::Reader;
-use crate::parsing::Rules;
+use crate::parsing::{RuleAction, Rules, DEFAULT_STATE};
+use crate::parsing::LineType;
 use std::io::Cursor;
 
 // Helper function to create a Reader from a string
@@ -575,4 +576,305 @@ fn test_read_entire_block_empty_input() {
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(err.message().contains("unexpected end of file"));
+}
+
+// Tests for line_type method
+#[test]
+fn test_line_type_end_of_section() {
+    let mut reader = reader_from_str("%%");
+    let definitions = Definitions::default();
+    
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    
+    assert!(matches!(result, LineType::EndOfSection));
+
+    // Test with whitespace after %%
+    let mut reader = reader_from_str("%%   ");
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    assert!(matches!(result, LineType::EndOfSection));
+
+    // Test with newline after %%
+    let mut reader = reader_from_str("%%\n");
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    assert!(matches!(result, LineType::EndOfSection));
+}
+
+#[test]
+fn test_line_type_empty_line() {
+    let mut reader = reader_from_str("\n");
+    let definitions = Definitions::default();
+    
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    
+    assert!(matches!(result, LineType::Empty));
+
+    // Test with spaces only
+    let mut reader = reader_from_str("  \n");
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    assert!(matches!(result, LineType::Empty));
+}
+
+#[test]
+fn test_line_type_whitespace_line() {
+    let mut reader = reader_from_str("   rule");
+    let definitions = Definitions::default();
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("lines starting by spaces are ignored"));
+}
+
+#[test]
+fn test_line_type_with_default_condition() {
+    // Mock a definitions object with states
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("[a-z]+ {print(\"test\");}");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    // Just check if it's a rule, we can't easily check the rule content
+    assert!(matches!(result.unwrap(), LineType::Rule(_)));
+}
+
+#[test]
+fn test_line_type_with_custom_condition() {
+    // Mock a definitions object with states
+    let mut definitions = Definitions::default();
+    definitions.states.insert("STATE".to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("<STATE>[0-9]+ {print(\"test\");}");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    // Just check if it's a rule
+    assert!(matches!(result.unwrap(), LineType::Rule(_)));
+}
+
+#[test]
+fn test_line_type_with_empty_after_condition() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert("STATE".to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("<STATE> ");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("empty line after start condition list"));
+}
+
+#[test]
+fn test_line_type_with_undeclared_condition() {
+    let definitions = Definitions::default();
+    // UNDECLARED is not in definitions
+    
+    let mut reader = reader_from_str("<UNDECLARED>[a-z]+ {print(\"test\");}");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.message().contains("undeclared start condition"));
+}
+
+#[test]
+fn test_line_type_end_of_file() {
+    let mut reader = reader_from_str("");
+    let definitions = Definitions::default();
+    
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    
+    assert!(matches!(result, LineType::EndOfSection));
+}
+
+#[test]
+fn test_line_type_with_or_action() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("[a-z]+ |");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    // Just check if it's a rule with Or action
+    assert!(matches!(result.unwrap(), LineType::Rule(_)));
+}
+
+#[test]
+fn test_line_type_with_following_regex() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("first/second {print(\"test\");}");
+    
+    let result = Rules::line_type(&mut reader, &definitions);
+    
+    // Just check if it's a rule
+    assert!(matches!(result.unwrap(), LineType::Rule(_)));
+}
+
+#[test]
+fn test_line_type_with_whitespace() {
+    let mut reader = reader_from_str("   \t  \n");
+    let definitions = Definitions::default();
+    
+    let result = Rules::line_type(&mut reader, &definitions).unwrap();
+    
+    assert!(matches!(result, LineType::Empty));
+}
+
+// Tests for parse_rules method
+#[test]
+fn test_parse_rules_empty() {
+    let mut reader = reader_from_str("%%");
+    let definitions = Definitions::default();
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 0);
+}
+
+#[test]
+fn test_parse_rules_single_rule() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str("[a-z]+ {action1;}\n%%");
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 1);
+}
+
+#[test]
+fn test_parse_rules_multiple_rules() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str(
+        "[a-z]+ {action1;}\n[0-9]+ {action2;}\n\"string\" {action3;}\n%%"
+    );
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 3);
+}
+
+#[test]
+fn test_parse_rules_with_empty_lines() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+
+    let mut reader = reader_from_str(
+        "[a-z]+ {action1;}\n\n[0-9]+ {action2;}\n\n\n\"string\" {action3;}\n%%"
+    );
+
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 3);
+}
+
+#[test]
+fn test_parse_rules_with_different_start_conditions() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    definitions.states.insert("STATE1".to_string(), StateType::Inclusive);
+    definitions.states.insert("STATE2".to_string(), StateType::Exclusive);
+    
+    let mut reader = reader_from_str(
+        "[a-z]+ {action1;}\n<STATE1>[0-9]+ {action2;}\n<STATE2>\"string\" {action3;}\n%%"
+    );
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 3);
+    
+    // First rule should have the default state
+    assert_eq!(result[0].start_conditions.len(), 1);
+    assert_eq!(result[0].start_conditions[0], DEFAULT_STATE);
+    
+    // Second rule should have STATE1
+    assert_eq!(result[1].start_conditions.len(), 1);
+    assert_eq!(result[1].start_conditions[0], "STATE1");
+    
+    // Third rule should have STATE2
+    assert_eq!(result[2].start_conditions.len(), 1);
+    assert_eq!(result[2].start_conditions[0], "STATE2");
+}
+
+#[test]
+fn test_parse_rules_with_multiple_start_conditions() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    definitions.states.insert("STATE1".to_string(), StateType::Inclusive);
+    definitions.states.insert("STATE2".to_string(), StateType::Exclusive);
+    
+    let mut reader = reader_from_str(
+        "<STATE1,STATE2>[0-9]+ {action;}\n%%"
+    );
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].start_conditions.len(), 2);
+    assert_eq!(result[0].start_conditions[0], "STATE1");
+    assert_eq!(result[0].start_conditions[1], "STATE2");
+}
+
+#[test]
+fn test_parse_rules_with_or_actions() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str(
+        "[a-z]+ {action1;}\n[0-9]+ |\n\"string\" {action3;}\n%%"
+    );
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 3);
+    
+    // Check that the second rule has an Or action
+    assert_eq!(result[1].action, RuleAction::Or);
+    
+    // First and third rules should have Statement actions
+    assert!(matches!(result[0].action, RuleAction::Statement(_)));
+    assert!(matches!(result[2].action, RuleAction::Statement(_)));
+}
+
+#[test]
+fn test_parse_rules_with_following_regex() {
+    let mut definitions = Definitions::default();
+    definitions.states.insert(DEFAULT_STATE.to_string(), StateType::Inclusive);
+    
+    let mut reader = reader_from_str(
+        "first/second {action;}\n%%"
+    );
+    
+    let result = Rules::parse_rules(&mut reader, &definitions).unwrap();
+    
+    assert_eq!(result.len(), 1);
+    assert!(result[0].following_regex_nfa.is_some());
+}
+
+#[test]
+fn test_parse_rules_with_error() {
+    let mut definitions = Definitions::default();
+
+	definitions.states.clear();
+
+	// No states defined, so this will fail
+    
+    let mut reader = reader_from_str(
+        "[a-z]+ {action;}\n%%"
+    );
+
+    let result = Rules::parse_rules(&mut reader, &definitions);
+    
+    assert!(result.is_err());
 }

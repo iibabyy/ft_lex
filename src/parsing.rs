@@ -21,6 +21,7 @@ use std::{
 };
 
 /// The main parsing structure that handles the lexer definition parsing process.
+#[derive(Debug)]
 pub struct Parsing {
     /// Collection of lexer definitions (substitutions, fragments, etc.)
     pub definitions: Definitions,
@@ -32,7 +33,7 @@ pub struct Parsing {
 }
 
 /// Represents the different sections of a lexer definition file.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Section {
     /// The definitions section containing substitutions, fragments, and declarations
     Definitions,
@@ -68,11 +69,9 @@ impl Parsing {
     ///
     /// This function handles both file inputs and stdin, processing each section
     /// (definitions, rules, subroutines) in sequence.
-    pub fn parse(&mut self, config: &Config) -> ParsingResult<()> {
+    pub fn parse<'parsing>(&'parsing mut self, config: &Config) -> Result<(), &'parsing Vec<ParsingError>> {
         // Create an iterator over the config arguments
         let mut args = config.args.iter().map(|arg| arg.as_ref());
-
-        let mut error: Option<ParsingError> = None;
 
         while let Some(arg) = args.next() {
             self.section = Section::Definitions;
@@ -81,33 +80,28 @@ impl Parsing {
                 let reader =
                     reader_from_file(path).map_err(|err| ParsingError::from(err).file(path));
 
-                if let Err(err) = reader {
-                    error = error.or(Some(err));
+                if reader.is_err() {
                     continue;
                 }
 
                 // For file input, create a reader and parse with file context
-                if let Err(err) = self.parse_sections(&mut reader.unwrap()) {
-                    error = error.or(Some(err));
-                }
+                let _ = self.parse_sections(&mut reader.unwrap());
             } else {
                 let reader =
                     reader_from_stdin().map_err(|err| ParsingError::from(err).file("<stdin>"));
 
-                if let Err(err) = reader {
-                    error = error.or(Some(err));
+                if reader.is_err() {
                     continue;
                 }
 
                 // For stdin input, create a reader and parse with stdin context
-                if let Err(err) = self.parse_sections(&mut reader.unwrap()) {
-                    error = error.or(Some(err));
-                }
+                let _ = self.parse_sections(&mut reader.unwrap());
             }
         }
 
-        if error.is_some() {
-            return Err(error.unwrap());
+        if self.errors.is_empty() == false {
+			self.errors.sort();
+            return Err(&self.errors);
         }
 
         Ok(())
@@ -117,7 +111,7 @@ impl Parsing {
     ///
     /// This function handles the parsing of each section (definitions, rules, subroutines)
     /// and advances to the next section when appropriate.
-    fn parse_sections<R: Read>(&mut self, reader: &mut Reader<R>) -> ParsingResult<()> {
+    fn parse_sections<'parsing, R: Read>(&'parsing mut self, reader: &mut Reader<R>) -> Result<(), &'parsing Vec<ParsingError>> {
         'big_loop: loop {
             match self.section {
                 Section::Definitions => {
@@ -156,11 +150,7 @@ impl Parsing {
         }
 
         if self.errors.is_empty() == false {
-            self.errors.sort();
-            return Err(std::mem::replace(
-                &mut self.errors[0],
-                ParsingError::syntax("foo"),
-            ));
+			return Err(&self.errors);
         }
 
         Ok(())

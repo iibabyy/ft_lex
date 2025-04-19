@@ -1,3 +1,7 @@
+use std::io::Read;
+
+use super::Reader;
+
 /// A type alias for parsing results that can either succeed with a value of type `T` or fail with a `ParsingError`.
 pub type ParsingResult<T> = Result<T, ParsingError>;
 
@@ -240,4 +244,9 @@ impl ParsingError {
         let err = format!("invalid number: `{}`", number.to_string());
         ParsingError::syntax(err)
     }
+
+	pub fn actual_line_number<R: Read>(mut self, reader: &Reader<R>) -> Self {
+		self.line_index = Some(reader.index());
+		self
+	}
 }

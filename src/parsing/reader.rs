@@ -208,6 +208,10 @@ impl<R: Read> Reader<R> {
 
         Ok(Some(str))
 	}
+
+    pub fn push_front(&mut self, c: char) {
+        self.rest.push_front(c);
+    }
 }
 
 pub fn reader_from_file(path: &str) -> io::Result<Reader<File>> {

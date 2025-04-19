@@ -34,11 +34,9 @@ HEX        \\x[0-9A-Fa-f]{1,2}
 
 \n printf("newline\n");
 
-. printf("peu importe...\n");
+. printf("peu importe...\n");				
 
-a/b {
-	{printf("BABABA\n");}
-}
+a/b |printf("peu importe...\n");		
 
 
 <TEST>a* printf("what ?!\n");

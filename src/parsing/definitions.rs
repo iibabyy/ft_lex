@@ -54,6 +54,12 @@ pub struct Definitions {
     pub states: HashMap<String, StateType>,
 }
 
+impl Default for Definitions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Represents different types of definitions that can appear in the definitions section.
 pub enum DefinitionType {
     /// Table size declaration (e.g., "%p 100")
