@@ -893,3 +893,64 @@ fn test_parse_rules_with_error() {
 
 	assert_eq!(tmp.len(), 0);
 }
+#[test]
+fn test_read_one_regular_expression_with_definitions() {
+    let mut substitutes = HashMap::new();
+    substitutes.insert("DIGIT".to_string(), "[0-9]".to_string());
+    substitutes.insert("LETTER".to_string(), "[a-zA-Z]".to_string());
+    
+    let mut reader = reader_from_str("{DIGIT}+{LETTER}* ");
+    
+    let result = Rules::read_one_regular_expression(&substitutes, &mut reader).unwrap();
+    
+    assert_eq!(result, "([0-9])+([a-zA-Z])*");
+}
+
+#[test]
+fn test_read_one_regular_expression_undefined_definition() {
+    let substitutes = HashMap::new();
+    let mut reader = reader_from_str("{UNDEFINED} ");
+    
+    let result = Rules::read_one_regular_expression(&substitutes, &mut reader);
+    
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+	dbg!(&err.message());
+    assert!(err.message().contains("undefined definition: {UNDEFINED}"));
+}
+
+#[test]
+fn test_read_one_regular_expression_with_escaped_chars() {
+    let substitutes = HashMap::new();
+    let mut reader = reader_from_str("\\{not_a_definition\\} ");
+    
+    let result = Rules::read_one_regular_expression(&substitutes, &mut reader).unwrap();
+    
+    assert_eq!(result, "\\{not_a_definition\\}");
+}
+
+#[test]
+fn test_read_one_regular_expression_with_quotes() {
+    let mut substitutes = HashMap::new();
+    substitutes.insert("TEST".to_string(), "test".to_string());
+    
+    let mut reader = reader_from_str("\"{TEST}\" ");
+    
+    let result = Rules::read_one_regular_expression(&substitutes, &mut reader).unwrap();
+    
+    // Definition should not be expanded inside quotes
+    assert_eq!(result, "\"{TEST}\"");
+}
+
+#[test]
+fn test_read_one_regular_expression_with_brackets() {
+    let mut substitutes = HashMap::new();
+    substitutes.insert("TEST".to_string(), "test".to_string());
+    
+    let mut reader = reader_from_str("[{TEST}] ");
+    
+    let result = Rules::read_one_regular_expression(&substitutes, &mut reader).unwrap();
+    
+    // Definition should not be expanded inside character class
+    assert_eq!(result, "[{TEST}]");
+}

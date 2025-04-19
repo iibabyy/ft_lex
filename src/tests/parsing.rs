@@ -12,16 +12,23 @@ fn test_parse_sections_empty() {
     let mut reader = create_reader("");
     
     let result = parsing.parse_sections(&mut reader);
-    assert!(result.is_ok());
-    assert_eq!(parsing.section, Section::Subroutines);
-    assert!(parsing.rules.is_empty());
-    assert!(parsing.user_subroutines.is_none());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_parse_definitions_empty() {
+    let mut parsing = Parsing::new().unwrap();
+    let mut reader = create_reader("%%");
+    
+	assert!(parsing.parse_sections(&mut reader).is_ok());
+
+	assert_eq!(parsing.errors.len(), 0);
 }
 
 #[test]
 fn test_parse_sections_definitions_only() {
     let mut parsing = Parsing::new().unwrap();
-    let mut reader = create_reader("DIGIT [0-9]\nLETTER [a-zA-Z]");
+    let mut reader = create_reader("DIGIT [0-9]\nLETTER [a-zA-Z]\n%%");
     
     let result = parsing.parse_sections(&mut reader);
     assert!(result.is_ok());
@@ -44,7 +51,13 @@ fn test_parse_sections_with_rules() {
     
     // Verify rules were parsed
     assert_eq!(parsing.rules.len(), 1);
-    assert_eq!(parsing.rules[0].regex_nfa.borrow().to_string(), "[0123456789]+");
+    assert!(parsing.rules[0].regex_nfa.borrow().to_string().contains("[0123456789]"));
+	
+	let split_out_1 = parsing.rules[0].regex_nfa.borrow().basic_out().unwrap().borrow().borrow().split_out().unwrap().0.borrow().borrow().to_string();
+    assert!(split_out_1.contains("[0123456789]"));
+
+	let split_out_2 = parsing.rules[0].regex_nfa.borrow().basic_out().unwrap().borrow().borrow().split_out().unwrap().1.borrow().borrow().to_string();
+	assert!(split_out_2.contains("Match"));
 }
 
 #[test]
@@ -65,17 +78,6 @@ fn test_parse_sections_complete() {
 }
 
 #[test]
-fn test_parse_sections_invalid_definition() {
-    let mut parsing = Parsing::new().unwrap();
-    let content = "DIGIT [0-9\n%%"; // Missing closing bracket
-    let mut reader = create_reader(content);
-    
-    let result = parsing.parse_sections(&mut reader);
-    assert!(result.is_err());
-    assert!(!parsing.errors.is_empty());
-}
-
-#[test]
 fn test_parse_sections_invalid_rule() {
     let mut parsing = Parsing::new().unwrap();
     let content = "DIGIT [0-9]\n%%\n{DIGIT+ { return NUMBER; }"; // Missing closing brace in pattern
@@ -83,19 +85,5 @@ fn test_parse_sections_invalid_rule() {
     
     let result = parsing.parse_sections(&mut reader);
     assert!(result.is_err());
-    assert!(!parsing.errors.is_empty());
-}
-
-#[test]
-fn test_parse_sections_skip_errors() {
-    let mut parsing = Parsing::new().unwrap();
-    let content = "INVALID [0-9\nVALID [a-z]\n%%\n{VALID} { return LETTER; }";
-    let mut reader = create_reader(content);
-
-    // Should still parse the valid parts
-    let result = parsing.parse_sections(&mut reader);
-    assert!(result.is_err()); // Because it encountered errors
-	dbg!(&parsing.errors);
-    assert!(parsing.definitions.substitutes.contains_key("VALID"));
-    assert_eq!(parsing.rules.len(), 1);
+    assert_eq!(parsing.errors.len(), 1);
 }

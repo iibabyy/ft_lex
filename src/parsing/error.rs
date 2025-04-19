@@ -251,7 +251,7 @@ impl ParsingError {
 	}
 
     pub fn undefined_definition(definition: impl Display) -> Self {
-        let message = format!("undefined definition {{{definition}}}");
+        let message = format!("undefined definition: {{{definition}}}");
 
         ParsingError::syntax(message)
     }

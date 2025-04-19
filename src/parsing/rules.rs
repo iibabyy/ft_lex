@@ -353,7 +353,8 @@ impl Rules {
 
 				'{' => {
 					let mut expanded = false;
-					let content = read_until('}', reader)?;
+					let mut content = read_until('}', reader)?;
+					let _ = content.pop();
 
 					if let Some(c) = content.chars().next() {
 						if c.is_ascii_alphabetic() || c == '_' {
@@ -372,6 +373,7 @@ impl Rules {
 					if expanded == false {
 						regex.push('{');
 						regex.push_str(&content);
+						regex.push('}');
 					}
 				},
 
