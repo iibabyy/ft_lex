@@ -116,13 +116,14 @@ impl Rules {
 
 		{	// Check if the line is empty
 			if custom_conditions && first_char.is_ascii_whitespace() {
+				let _ = reader.line()?;
 				return ParsingError::warning("empty line after start condition list").into()
 			}
 
 			if first_char == '\n' {
 				return Ok(LineType::Empty)
 			}
-			
+
 			if first_char.is_ascii_whitespace() {
 				let line = reader.line()?;
 
@@ -141,6 +142,7 @@ impl Rules {
 		reader.push_char(first_char);
 
 		let (regex, following_regex) = Self::get_regular_expression(&definitions.substitutes, reader)?;
+		dbg!(&regex);
 
 		let action = Self::get_action(reader)?;
 
@@ -365,19 +367,19 @@ impl Rules {
 					let mut expanded = false;
 					let mut content = read_until('}', reader, false)?;
 
+					let last = content.chars().last();
+
+					if last != Some('}') {
+						if last == Some('\n') {
+							return ParsingError::unrecognized_rule().because("unclosed `{`").into()
+						} else {
+							let _ = reader.line()?;
+							return ParsingError::unrecognized_rule().because("unclosed `{`").into()
+						}
+					}
+
 					if let Some(c) = content.chars().next() {
 						if c.is_ascii_alphabetic() || c == '_' {
-
-							let last = content.chars().last();
-
-							if last != Some('}') {
-								if last == Some('\n') {
-									return ParsingError::unrecognized_rule().because("unclosed `{`").into()
-								} else {
-									let _ = reader.line()?;
-									return ParsingError::unrecognized_rule().because("unclosed `{`").into()
-								}
-							}
 
 							let _ = content.pop();
 
