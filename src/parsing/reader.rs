@@ -91,11 +91,11 @@ impl<R: Read> Reader<R> {
     }
 
     pub fn push_str(&mut self, s: &str) {
-        self.rest.extend(s.chars());
+        s.chars().rev().for_each(|c| self.push_char(c));
     }
 
     pub fn push_char(&mut self, c: char) {
-        self.rest.push_back(c);
+        self.rest.push_front(c);
     }
 
     pub fn peek(&mut self) -> Option<Result<&u8, &io::Error>> {
@@ -208,10 +208,6 @@ impl<R: Read> Reader<R> {
 
         Ok(Some(str))
 	}
-
-    pub fn push_front(&mut self, c: char) {
-        self.rest.push_front(c);
-    }
 
 	pub fn read(&mut self, n: usize) -> io::Result<Option<String>> {
 		if self.peek().is_none() {

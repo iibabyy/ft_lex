@@ -50,6 +50,8 @@ impl Rules {
     ) -> ParsingResult<&'rules mut Vec<Rule>> {
 		loop {
 			let line_type = Self::line_type(reader, definitions);
+			
+			dbg!(&line_type);
 
 			if let Err(err) = line_type {
 				return Err(err);
@@ -136,7 +138,7 @@ impl Rules {
 			}
 		}
 
-		reader.push_front(first_char);
+		reader.push_char(first_char);
 
 		let (regex, following_regex) = Self::get_regular_expression(&definitions.substitutes, reader)?;
 
@@ -311,26 +313,34 @@ impl Rules {
 		substitutes: &HashMap<String, String>,
 		reader: &mut Reader<R>
 	) -> ParsingResult<String> {
-		let read_until = |delim: char, reader: &mut Reader<R>| -> ParsingResult<String> {
+		let read_until = |delim: char, reader: &mut Reader<R>, include_whitespaces: bool| -> ParsingResult<String> {
 			let mut str = String::new();
 
 			loop {	// read until the closing quote
 				let c = reader.next()?
-					.ok_or(ParsingError::end_of_file().because(format!("unclosed '{delim}'")))?
+					.ok_or(ParsingError::end_of_file().because(format!("unclosed `{delim}`")))?
 					as char;
 
 				if c == '\\' {
 					str.push(c);
 
 					let next = reader.next()?
-						.ok_or(ParsingError::end_of_file().because(format!("unclosed '{delim}'")))?
+						.ok_or(ParsingError::end_of_file().because(format!("unclosed `{delim}`")))?
 						as char;
 
 					str.push(next);
 				} else if c == delim {
 					str.push(c);
 					break;
+				} else if c == '/' {
+					reader.push_char(c);
+					break;
 				} else {
+					if include_whitespaces == false && c.is_ascii_whitespace() {
+						reader.push_char(c);
+						break;
+					}
+
 					str.push(c);
 				}
 			}
@@ -348,16 +358,29 @@ impl Rules {
 			match c {
 				'\"' => {
 					regex.push(c);
-					regex.push_str(&read_until('\"', reader)?);
+					regex.push_str(&read_until('\"', reader, true)?);
 				},
 
 				'{' => {
 					let mut expanded = false;
-					let mut content = read_until('}', reader)?;
-					let _ = content.pop();
+					let mut content = read_until('}', reader, false)?;
 
 					if let Some(c) = content.chars().next() {
 						if c.is_ascii_alphabetic() || c == '_' {
+
+							let last = content.chars().last();
+
+							if last != Some('}') {
+								if last == Some('\n') {
+									return ParsingError::unrecognized_rule().because("unclosed `{`").into()
+								} else {
+									let _ = reader.line()?;
+									return ParsingError::unrecognized_rule().because("unclosed `{`").into()
+								}
+							}
+
+							let _ = content.pop();
+
 							if let Some(substitute) = substitutes.get(&content) {
 								regex.push('(');
 								regex.push_str(substitute);
@@ -379,7 +402,7 @@ impl Rules {
 
 				'[' => {
 					regex.push(c);
-					regex.push_str(&read_until(']', reader)?);
+					regex.push_str(&read_until(']', reader, true)?);
 				},
 
 				'\\' => {
