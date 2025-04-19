@@ -35,7 +35,7 @@ pub struct Parsing {
     pub errors: Vec<ParsingError>,
 
     /// The current section being parsed
-    section: Section,
+    pub section: Section,
 }
 
 /// Represents the different sections of a lexer definition file.
@@ -77,7 +77,7 @@ impl Parsing {
     ///
     /// This function handles both file inputs and stdin, processing each section
     /// (definitions, rules, subroutines) in sequence.
-    pub fn parse<'parsing>(&'parsing mut self, config: &Config) -> Result<(), &'parsing Vec<ParsingError>> {
+    pub fn parse_file<'parsing>(&'parsing mut self, config: &Config) -> Result<(), &'parsing Vec<ParsingError>> {
         // Create an iterator over the config arguments
         let mut args = config.args.iter().map(|arg| arg.as_ref());
 
@@ -119,7 +119,7 @@ impl Parsing {
     ///
     /// This function handles the parsing of each section (definitions, rules, subroutines)
     /// and advances to the next section when appropriate.
-    fn parse_sections<'parsing, R: Read>(&'parsing mut self, reader: &mut Reader<R>) -> Result<(), &'parsing Vec<ParsingError>> {
+    pub fn parse_sections<'parsing, R: Read>(&'parsing mut self, reader: &mut Reader<R>) -> Result<(), &'parsing Vec<ParsingError>> {
 
 		'big_loop: loop {
             match self.section {

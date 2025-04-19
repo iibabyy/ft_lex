@@ -5,6 +5,7 @@ use crate::parsing::error::ParsingResult;
 use crate::parsing::reader::Reader;
 use crate::parsing::{RuleAction, Rules, DEFAULT_STATE};
 use crate::parsing::LineType;
+use std::collections::HashMap;
 use std::io::Cursor;
 
 // Helper function to create a Reader from a string
@@ -207,7 +208,7 @@ fn test_multiple_commas() {
 fn test_read_one_regular_expression_with_slash_delimiter() {
     let mut reader = reader_from_str("[a-z]+/");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "[a-z]+");
 }
@@ -216,7 +217,7 @@ fn test_read_one_regular_expression_with_slash_delimiter() {
 fn test_read_one_regular_expression_with_whitespace_delimiter() {
     let mut reader = reader_from_str("[0-9]+ ");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "[0-9]+");
 }
@@ -225,7 +226,7 @@ fn test_read_one_regular_expression_with_whitespace_delimiter() {
 fn test_read_one_regular_expression_with_tab_delimiter() {
     let mut reader = reader_from_str("abc\t");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "abc");
 }
@@ -234,7 +235,7 @@ fn test_read_one_regular_expression_with_tab_delimiter() {
 fn test_read_one_regular_expression_with_newline_delimiter() {
     let mut reader = reader_from_str("xyz\n");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "xyz");
 }
@@ -243,7 +244,7 @@ fn test_read_one_regular_expression_with_newline_delimiter() {
 fn test_read_one_regular_expression_with_escaped_slash() {
     let mut reader = reader_from_str("a\\/b/");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "a\\/b");
 }
@@ -252,7 +253,7 @@ fn test_read_one_regular_expression_with_escaped_slash() {
 fn test_read_one_regular_expression_with_escaped_whitespace() {
     let mut reader = reader_from_str("a\\ b/");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "a\\ b");
 }
@@ -261,7 +262,7 @@ fn test_read_one_regular_expression_with_escaped_whitespace() {
 fn test_read_one_regular_expression_complex() {
     let mut reader = reader_from_str("[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\) ");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\)");
 }
@@ -270,7 +271,7 @@ fn test_read_one_regular_expression_complex() {
 fn test_read_one_regular_expression_empty() {
     let mut reader = reader_from_str("/");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "");
 }
@@ -279,7 +280,7 @@ fn test_read_one_regular_expression_empty() {
 fn test_read_one_regular_expression_unclosed() {
     let mut reader = reader_from_str("[a-z]+");
     
-    let result = Rules::read_one_regular_expression(&mut reader);
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -290,7 +291,7 @@ fn test_read_one_regular_expression_unclosed() {
 fn test_read_one_regular_expression_with_multiple_escapes() {
     let mut reader = reader_from_str("\\[\\]\\(\\)\\*\\+\\?\\/\\\\/ ");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "\\[\\]\\(\\)\\*\\+\\?\\/\\\\");
 }
@@ -299,7 +300,7 @@ fn test_read_one_regular_expression_with_multiple_escapes() {
 fn test_read_one_regular_expression_with_character_classes() {
     let mut reader = reader_from_str("[\\d\\a]+/");
     
-    let result = Rules::read_one_regular_expression(&mut reader).unwrap();
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result, "[\\d\\a]+");
 }
@@ -308,7 +309,7 @@ fn test_read_one_regular_expression_with_character_classes() {
 fn test_read_one_regular_expression_no_input() {
     let mut reader = reader_from_str("");
     
-    let result = Rules::read_one_regular_expression(&mut reader);
+    let result = Rules::read_one_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -319,7 +320,7 @@ fn test_read_one_regular_expression_no_input() {
 fn test_get_regular_expression_simple() {
     let mut reader = reader_from_str("[a-z]+ ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "[a-z]+");
     assert_eq!(result.1, None);
@@ -329,7 +330,7 @@ fn test_get_regular_expression_simple() {
 fn test_get_regular_expression_with_tab() {
     let mut reader = reader_from_str("abc\t");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "abc");
     assert_eq!(result.1, None);
@@ -339,7 +340,7 @@ fn test_get_regular_expression_with_tab() {
 fn test_get_regular_expression_with_newline() {
     let mut reader = reader_from_str("xyz\n");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "xyz");
     assert_eq!(result.1, None);
@@ -349,7 +350,7 @@ fn test_get_regular_expression_with_newline() {
 fn test_get_regular_expression_with_escaped_whitespace() {
     let mut reader = reader_from_str("a\\ b\\ c ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "a\\ b\\ c");
     assert_eq!(result.1, None);
@@ -359,7 +360,7 @@ fn test_get_regular_expression_with_escaped_whitespace() {
 fn test_get_regular_expression_with_escaped_slash() {
     let mut reader = reader_from_str("a\\/b ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "a\\/b");
     assert_eq!(result.1, None);
@@ -369,7 +370,7 @@ fn test_get_regular_expression_with_escaped_slash() {
 fn test_get_regular_expression_complex() {
     let mut reader = reader_from_str("[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\) ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "[a-zA-Z_][a-zA-Z0-9_]*\\(.*\\)");
     assert_eq!(result.1, None);
@@ -379,7 +380,7 @@ fn test_get_regular_expression_complex() {
 fn test_get_regular_expression_with_quantifiers() {
     let mut reader = reader_from_str("a+b*c? ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "a+b*c?");
     assert_eq!(result.1, None);
@@ -389,7 +390,7 @@ fn test_get_regular_expression_with_quantifiers() {
 fn test_get_regular_expression_with_groups() {
     let mut reader = reader_from_str("(ab|cd)+ ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "(ab|cd)+");
     assert_eq!(result.1, None);
@@ -399,7 +400,7 @@ fn test_get_regular_expression_with_groups() {
 fn test_get_regular_expression_with_character_sets() {
     let mut reader = reader_from_str("[^abc][0-9] ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "[^abc][0-9]");
     assert_eq!(result.1, None);
@@ -409,7 +410,7 @@ fn test_get_regular_expression_with_character_sets() {
 fn test_get_regular_expression_with_special_chars() {
     let mut reader = reader_from_str("\\w+\\d+\\s+ ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "\\w+\\d+\\s+");
     assert_eq!(result.1, None);
@@ -419,7 +420,7 @@ fn test_get_regular_expression_with_special_chars() {
 fn test_get_regular_expression_empty() {
     let mut reader = reader_from_str(" ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "");
     assert_eq!(result.1, None);
@@ -429,7 +430,7 @@ fn test_get_regular_expression_empty() {
 fn test_get_regular_expression_no_whitespace() {
     let mut reader = reader_from_str("abc");
     
-    let result = Rules::get_regular_expression(&mut reader);
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -440,7 +441,7 @@ fn test_get_regular_expression_no_whitespace() {
 fn test_get_regular_expression_with_slash_delimiter() {
     let mut reader = reader_from_str("abc/");
     
-    let result = Rules::get_regular_expression(&mut reader);
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -452,7 +453,7 @@ fn test_get_regular_expression_with_slash_delimiter() {
 fn test_get_regular_expression_no_input() {
     let mut reader = reader_from_str("");
     
-    let result = Rules::get_regular_expression(&mut reader);
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -463,7 +464,7 @@ fn test_get_regular_expression_no_input() {
 fn test_get_regular_expression_with_section() {
     let mut reader = reader_from_str("first/second ");
     
-    let result = Rules::get_regular_expression(&mut reader).unwrap();
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader).unwrap();
     
     assert_eq!(result.0, "first");
     assert_eq!(result.1, Some("second".to_string()));
@@ -473,7 +474,7 @@ fn test_get_regular_expression_with_section() {
 fn test_get_regular_expression_with_duplicate_slash() {
     let mut reader = reader_from_str("first/second/");
     
-    let result = Rules::get_regular_expression(&mut reader);
+    let result = Rules::get_regular_expression(&HashMap::new(), &mut reader);
     
     assert!(result.is_err());
     let err = result.unwrap_err();

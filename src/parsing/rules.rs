@@ -2,7 +2,7 @@ use crate::regex::normalizer::NormalizedDfa;
 
 use super::*;
 
-use std::io::Read;
+use std::{collections::HashMap, io::Read};
 
 pub const DEFAULT_STATE: &str = "INITIAL";
 
@@ -138,7 +138,7 @@ impl Rules {
 
 		reader.push_front(first_char);
 
-		let (regex, following_regex) = Self::get_regular_expression(reader)?;
+		let (regex, following_regex) = Self::get_regular_expression(&definitions.substitutes, reader)?;
 
 		let action = Self::get_action(reader)?;
 
@@ -275,10 +275,11 @@ impl Rules {
 	}
 
 	pub fn get_regular_expression<R: Read>(
+		substitutes: &HashMap<String, String>,
 		reader: &mut Reader<R>
 	) -> ParsingResult<(String, Option<String>)> {
 		
-		let regex = Self::read_one_regular_expression(reader)?;
+		let regex = Self::read_one_regular_expression(substitutes, reader)?;
 
 		let peek = *reader.peek()
 			.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))??
@@ -292,7 +293,7 @@ impl Rules {
 		// skip the '/'
 		let _ = reader.next()?;
 
-		let following_regex = Self::read_one_regular_expression(reader)?;
+		let following_regex = Self::read_one_regular_expression(substitutes, reader)?;
 
 		let peek = *reader.peek()
 			.ok_or(ParsingError::end_of_file().because("unclosed regular expression"))??
@@ -307,6 +308,7 @@ impl Rules {
 	}
 
 	pub fn read_one_regular_expression<R: Read>(
+		substitutes: &HashMap<String, String>,
 		reader: &mut Reader<R>
 	) -> ParsingResult<String> {
 		let read_until = |delim: char, reader: &mut Reader<R>| -> ParsingResult<String> {
@@ -347,6 +349,30 @@ impl Rules {
 				'\"' => {
 					regex.push(c);
 					regex.push_str(&read_until('\"', reader)?);
+				},
+
+				'{' => {
+					let mut expanded = false;
+					let content = read_until('}', reader)?;
+
+					if let Some(c) = content.chars().next() {
+						if c.is_ascii_alphabetic() || c == '_' {
+							if let Some(substitute) = substitutes.get(&content) {
+								regex.push('(');
+								regex.push_str(substitute);
+								regex.push(')');
+
+								expanded = true;
+							} else {
+								return ParsingError::undefined_definition(content).into()
+							}
+						}
+					}
+
+					if expanded == false {
+						regex.push('{');
+						regex.push_str(&content);
+					}
 				},
 
 				'[' => {

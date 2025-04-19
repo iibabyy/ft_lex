@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use super::Reader;
 
@@ -249,4 +249,10 @@ impl ParsingError {
 		self.line_index = Some(reader.index());
 		self
 	}
+
+    pub fn undefined_definition(definition: impl Display) -> Self {
+        let message = format!("undefined definition {{{definition}}}");
+
+        ParsingError::syntax(message)
+    }
 }

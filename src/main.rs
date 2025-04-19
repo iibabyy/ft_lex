@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut parser = Parsing::new()?;
 
-    if let Err(errors) = parser.parse(&config) {
+    if let Err(errors) = parser.parse_file(&config) {
 		// print errors
         for err in errors {
 			match config.stdout {

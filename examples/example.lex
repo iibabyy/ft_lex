@@ -42,7 +42,7 @@ a/b |printf("peu importe...\n");
 <TEST>a* printf("what ?!\n");
 
 <COMMENT>{
-  {DIGIT}a        { BEGIN(INITIAL); }
+  {sdfsdf}a        { BEGIN(INITIAL); }
 }
 
 <STRING>{
